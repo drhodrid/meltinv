@@ -114,8 +114,8 @@ def obtain_thickness_major(c_Al2O3):
     x_min = (mean_Al2O3 - b_Al2O3 + std) / k_Al2O3
     x_max = (mean_Al2O3 - b_Al2O3 - std) / k_Al2O3
 
-    # return 0, 150
-    return x_min, x_max
+    return 0, 150
+    # return x_min, x_max
 
 def load_all_grids():
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
@@ -549,13 +549,38 @@ def plot_results(df, location, count, result):
     print(f"Figure saved to: {output_file.resolve()}")
     plt.close(fig)
 
-def calibration(T, P, b):
+def calibration(T, P, h, b):
     T = np.array(T)
     P = np.array(P) / 33
     b = np.array([i if i >= 0 else 0 for i in list(b)])
+    print(b)
 
-    # return T
-    return T - (181.3 + 21.4 * P - 6.8 * P**2) * b / 100
+    def solidus(P):
+        return 1101.3 + 141.4 * P - 6.8 * P ** 2
+
+    kG2 = 120
+    bG2 = 920
+    def solidus_G2(P):
+        return bG2 + kG2 * P
+
+    def wet_solidus_perpendicular(P0, b):
+        T0 = solidus(P0)
+        kprime = kG2 / 25000
+        P1 = (kprime * T0 + P0 - kprime * bG2) / (kprime * kG2 + 1)
+        T1 = solidus_G2(P1)
+
+        f = b / 100.
+        Pnew = P0 + f * (P1 - P0)
+        Tnew = T0 + f * (T1 - T0)
+        return Pnew - P0, Tnew - T0
+
+    delta_P, delta_T = wet_solidus_perpendicular(P, b)
+
+    h_cali = h + delta_P * 33 * 5
+    T_cali = T + delta_T * 5
+
+
+    return T_cali, h_cali
 
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, make_figures=False):
@@ -587,10 +612,13 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
 
     T_mean = results['T_mean']
     P_mean = results['pres_mean']
+    depth_mean = results['depth_mean']
     basalt_perc = results['basalt_percentage']
 
-    results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', calibration(T_mean, P_mean, basalt_perc))
+    T_cali, h_cali = calibration(T_mean, P_mean, depth_mean, basalt_perc)
 
+    results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', T_cali)
+    results.insert(results.columns.get_loc('depth_mean') + 1, 'depth_mean_cali', h_cali)
     summary_df = pd.DataFrame(results)
     save_results(file_name, summary_df)
 
