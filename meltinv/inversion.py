@@ -152,10 +152,14 @@ def build_group_list(df):
     ]
 
 def save_results(file_name, inv_result_df):
-    results_dir = Path("inversion_results")
+    base_name = Path(file_name).stem
+
+    if "corrected" in base_name:
+        base_name = base_name.replace("_corrected", "")
+
+    results_dir = Path(f"inversion_results")
     results_dir.mkdir(exist_ok=True)
 
-    base_name = Path(file_name).stem
     output_file = results_dir / f"{base_name}_inversion_summary_log10.xlsx"
 
     inv_result_df.insert(0, 'location', inv_result_df.pop('location'))
@@ -578,7 +582,6 @@ def calibration(T, P, h, b):
 
     h_cali = h + delta_P * 33 * 5
     T_cali = T + delta_T * 5
-
 
     return T_cali, h_cali
 
