@@ -429,7 +429,7 @@ def plot_results(df, location, count, result):
     ax.legend(loc='lower left')
 
     inv_temp = int(65 + 5 * t_idx)
-    inv_thickness = int(15 + 2 + p_idx)
+    inv_thickness = int(15 + 2 * p_idx)
     inv_basalt = int(basalt_idx)
     ax.text(0.99, 0.987, f"{location}", ha='right', va='top', fontweight='bold', transform=ax.transAxes)
     ax.text(0.99, 0.93, f'Temperature = {inv_temp} K\nThickness = {inv_thickness} km'
