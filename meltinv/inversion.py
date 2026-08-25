@@ -566,50 +566,18 @@ def calibration(T, P, h, b):
     def solidus_G2(P):
         return bG2 + kG2 * P
 
-    def hybrid_offset(P0, b, gamma=9.0):
+    def hybrid_offset(P0, b, gamma=9.0, w=0.5):
         """
-        Non-linear, flux-weighted correction for a peridotite+pyroxenite
-        (G2) veined source, replacing the earlier isobaric-only
-        (basalt_cali_temp), isothermal-only (basalt_cali_pres), and
-        arbitrary-perpendicular (basalt_cali_perp) attempts.
+        Flux-weighted (Phipps Morgan, 2001; Sobolev et al., 2007) offset
+        toward the G2 pyroxenite solidus, fraction x(f)=f*gamma/(f*gamma+1-f),
+        gamma anchored to Sobolev et al. (2007) SOM p.S4 Eq.S3 + Table S2a
+        (Hawaii-OIB: f=0.16, mean Xpx=0.64 -> gamma~9.3).
 
-        Physical picture (Allegre & Turcotte, 1986, "marble-cake mantle";
-        Phipps Morgan, 2001; Sobolev et al., 2007, Science 316, 412-417):
-        recycled basaltic material persists in the mantle as discrete
-        pyroxenite veins, not a homogenized solidus blend. Each lithology
-        melts along its OWN, f-independent solidus, but pyroxenite is far
-        more productive near its solidus (Pertermann & Hirschmann, 2003;
-        Lambart et al., 2016), so a small vein mass fraction f=b/100
-        contributes a disproportionate share of the erupted melt. That
-        share is the flux-weighted fraction:
-
-            x(f) = f*gamma / (f*gamma + (1-f))
-
-        gamma (pyroxenite/peridotite melt-productivity contrast) is
-        anchored against Sobolev et al. (2007) SOM (sobolev.som.rev1.pdf),
-        p. S4 ("Oceanic crust in magma sources", their Eq. S3) and Table
-        S2a (p. S5-S9). Their Xcrc (recycled-crust SOURCE fraction, = f
-        here) is a stated group average: 4% MORB, 16% WPM-THICK
-        (Hawaii-type OIB, closest analog to this dataset). Their Xpx
-        (pyroxenite-derived MELT fraction, = x(f) here) is given per
-        sample in Table S2a col. "X px" (from olivine 100Mn/Fe via their
-        Eq. S2); sample means, hand-extracted from that table:
-          MORB      (N=42, 1 low-Fo outlier dropped): mean Xpx = 0.173
-          Hawaii OIB (N=99, WPM-THICK Hawaii rows only):  mean Xpx = 0.64
-        Solving x=f*gamma/(f*gamma+1-f) for gamma at each anchor:
-          MORB:       f=0.04, x=0.173 -> gamma ~ 5.0
-          Hawaii OIB: f=0.16, x=0.64  -> gamma ~ 9.3
-        Default here (9) uses the Hawaii-OIB anchor (this dataset is
-        modern_OIB); sensitivity-test down to gamma~5 (MORB anchor) as a
-        lower bound. These are sample means from a hand-extracted subset
-        of Table S2a (OCR'd, no clean CSV available), not the full
-        ~190-sample dataset in Sobolev et al.'s separate Table S2 zip
-        file -- good for an order-of-magnitude anchor, not exact to the
-        2nd decimal.
-
-        x(f) is used for BOTH the temperature and thickness correction so
-        they stay self-consistent (one shared weighting, not two
-        independently-tuned corrections).
+        dT_end (isobaric) and dP_end (isothermal) are the same underlying
+        offset to the G2 line (dP_end = -dT_end/kG2 exactly), so applying
+        both at full strength double-counts it. w splits it instead: w=0.5
+        applies half to T, half to h, so the two corrections partition
+        rather than duplicate the single pyroxenite effect.
         """
         f = b / 100.
         x = f * gamma / (f * gamma + (1 - f))
@@ -619,7 +587,7 @@ def calibration(T, P, h, b):
         P_G2_at_T0 = (T0 - bG2) / kG2
         dP_end = P_G2_at_T0 - P0               # full (x=1) isothermal offset: >=0
 
-        return x * dP_end, x * dT_end
+        return (1 - w) * x * dP_end, w * x * dT_end
 
     delta_P, delta_T = hybrid_offset(P, b)
 
