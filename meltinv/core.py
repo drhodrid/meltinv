@@ -3,12 +3,12 @@ from .inversion import invert_melt_condition
 from .frac_correction import fractionation_correction
 
 def invert(file_name, depleted_locations=None, correction=False, src_Fo=0.9,
-           max_olivine_addition=0.5, make_figures=False):
+           max_olivine_addition=0.5, make_figures=False, per_sample=False):
     """
     High-level API for melt inversion.
     """
     summary_df = invert_melt_condition(file_name, depleted_locations, correction,
-                          src_Fo, max_olivine_addition, make_figures)
+                          src_Fo, max_olivine_addition, make_figures, per_sample)
 
     return summary_df
 

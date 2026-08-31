@@ -28,6 +28,7 @@ def main():
     parser_inv.add_argument("--src_Fo", type=float, default=0.9)
     parser_inv.add_argument("--max_olivine_addition", type=float, default=0.5)
     parser_inv.add_argument("--make_figures", action="store_true")
+    parser_inv.add_argument("--per_sample", action="store_true")
 
     args = parser.parse_args()
 
@@ -48,7 +49,8 @@ def main():
             correction=args.correction,
             src_Fo=args.src_Fo,
             max_olivine_addition=args.max_olivine_addition,
-            make_figures=args.make_figures
+            make_figures=args.make_figures,
+            per_sample=args.per_sample
         )
 
 

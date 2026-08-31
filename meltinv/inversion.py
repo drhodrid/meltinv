@@ -126,15 +126,15 @@ def load_all_grids():
         "pres_max": load_data_file("melt_max_pres.npy"),
     }
 
-def build_group_list(df):
+def build_group_list(df, min_count=2):
     grouped = df.groupby("location").size().reset_index(name="count")
     return [
         (row["location"], row["count"])
         for _, row in grouped.iterrows()
-        if row["count"] >= 2
+        if row["count"] >= min_count
     ]
 
-def save_results(file_name, inv_result_df):
+def save_results(file_name, inv_result_df, per_sample=False):
     base_name = Path(file_name).stem
 
     if "corrected" in base_name:
@@ -143,15 +143,18 @@ def save_results(file_name, inv_result_df):
     results_dir = Path(f"inversion_results")
     results_dir.mkdir(exist_ok=True)
 
-    output_file = results_dir / f"{base_name}_inversion_summary_log10.xlsx"
+    suffix = "_sample_inversion_summary_log10.xlsx" if per_sample else "_inversion_summary_log10.xlsx"
+    output_file = results_dir / f"{base_name}{suffix}"
 
     inv_result_df.insert(0, 'location', inv_result_df.pop('location'))
+    if 'sample_number' in inv_result_df.columns:
+        inv_result_df.insert(1, 'sample_number', inv_result_df.pop('sample_number'))
 
     inv_result_df.to_excel(output_file, index=False)
     print(f"Results saved to: {output_file.resolve()}")
 
 
-def compute_total_ree_misfit(df, mask, scale_val, grids):
+def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
     """
     Compute total normalized misfit grid for one enrichment scale value.
     """
@@ -176,7 +179,7 @@ def compute_total_ree_misfit(df, mask, scale_val, grids):
         c_sample = df[mask][ree]
         sample_count = np.count_nonzero(~np.isnan(c_sample))
 
-        if sample_count <= 1:
+        if sample_count < min_sample_count:
             continue
 
         misfit_grid = np.zeros_like(total_misfit_grid)
@@ -245,7 +248,7 @@ def get_enrichment_values(location, depleted_locations):
         return default_range
 
 
-def invert_single_group(df, location, count, grids, test_enrichment_values):
+def invert_single_group(df, location, count, grids, test_enrichment_values, min_sample_count=2):
     """
     Perform inversion for a single volcanic location group.
     Return the best inversion result for this group.
@@ -283,7 +286,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values):
             df=df,
             mask=mask,
             scale_val=scale_val,
-            grids=grids
+            grids=grids,
+            min_sample_count=min_sample_count
         )
 
         full_3d_grids.append(total_misfit_grid)
@@ -557,19 +561,29 @@ def calibration(T, P, h, b):
     return T_cali, h_cali
 
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
-                          src_Fo=0.9, max_olivine_addition=0.4, make_figures=False):
+                          src_Fo=0.9, max_olivine_addition=0.4, make_figures=False,
+                          per_sample=False):
     if correction == False:
         df = read_melt_composition(file_name)
     else:
         df = fractionation_correction(file_name, src_Fo, max_olivine_addition)
 
-    group_list = build_group_list(df)
+    if per_sample:
+        df = df.copy()
+        sample_number = df.groupby("location").cumcount() + 1
+        original_location = df["location"]
+        original_position = range(len(df))
+        df["location"] = original_location.astype(str) + "__sample" + sample_number.astype(str)
+        location_map = dict(zip(df["location"], zip(original_location, sample_number, original_position)))
+
+    group_list = build_group_list(df, min_count=1 if per_sample else 2)
     grids = load_all_grids()
     results = []
     for g_i, group in enumerate(group_list):
         location, count = group
         test_enrichment_values = get_enrichment_values(location, depleted_location)
-        result = invert_single_group(df, location, count, grids, test_enrichment_values)
+        result = invert_single_group(df, location, count, grids, test_enrichment_values,
+                                     min_sample_count=1 if per_sample else 2)
 
         if result is not None:
             result["location"] = location
@@ -584,6 +598,12 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
 
     results = pd.DataFrame(results)
 
+    if per_sample:
+        results["sample_number"] = results["location"].map(lambda x: location_map[x][1])
+        results["_original_position"] = results["location"].map(lambda x: location_map[x][2])
+        results["location"] = results["location"].map(lambda x: location_map[x][0])
+        results = results.sort_values("_original_position").drop(columns="_original_position").reset_index(drop=True)
+
     T_mean = results['T_mean']
     P_mean = results['pres_mean']
     depth_mean = results['depth_mean']
@@ -594,7 +614,7 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
     results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', T_cali)
     results.insert(results.columns.get_loc('depth_mean') + 1, 'depth_mean_cali', h_cali)
     summary_df = pd.DataFrame(results)
-    save_results(file_name, summary_df)
+    save_results(file_name, summary_df, per_sample=per_sample)
 
     return summary_df
 
