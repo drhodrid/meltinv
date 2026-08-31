@@ -65,7 +65,7 @@ def read_melt_composition(file_name):
     else:
         raise ValueError("Unsupported file format. Please provide a .xlsx or .csv file.")
 
-    required_columns = ['location', 'Al2O3_primary', 'La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
+    required_columns = ['location', 'La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
                         'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
 
     missing = [col for col in required_columns if col not in melt_composition.columns]
@@ -99,23 +99,6 @@ def apply_mixing(concentrations, ree_variables, dict_mix):
         grid = np.asarray(grid, dtype=float)
         scaled.append(grid * factor)
     return scaled
-
-def obtain_thickness_major(c_Al2O3):
-    """
-    The estimated thickness is calculated using a linear empirical relationship
-    between Al2O3 and lithospheric thickness. The returned minimum and
-    maximum bounds reflect ±1 standard deviation of the calibration.
-    """
-    k_Al2O3 = -0.07
-    b_Al2O3 = 15.29
-    std = 1.43
-    mean_Al2O3 = np.mean(c_Al2O3)
-    x_mean = (mean_Al2O3 - b_Al2O3) / k_Al2O3
-    x_min = (mean_Al2O3 - b_Al2O3 + std) / k_Al2O3
-    x_max = (mean_Al2O3 - b_Al2O3 - std) / k_Al2O3
-
-    return 0, 150
-    # return x_min, x_max
 
 def load_all_grids():
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
@@ -216,7 +199,7 @@ def compute_total_ree_misfit(df, mask, scale_val, grids):
         num_ree_valid += 1
 
     if num_ree_valid == 0:
-        return None, None, None, None, None, None
+        return None, None, None, None
 
     total_misfit_grid /= num_ree_valid
 
@@ -225,35 +208,25 @@ def compute_total_ree_misfit(df, mask, scale_val, grids):
     valid_positive = total_misfit_grid[valid_positive_mask]
 
     if len(valid_positive) == 0:
-        return None, None, None, None, None, None
-
-    # Now consider the Al2O3 constraints
-
-    c_sample_Al2O3 = df[mask]['Al2O3_primary']
-    x_Al_min, x_Al_max = obtain_thickness_major(c_sample_Al2O3)
-    x_min_Al_idx, x_max_Al_idx = (x_Al_min - 15) / 2, (x_Al_max - 15) / 2
+        return None, None, None, None
 
     threshold = np.percentile(valid_positive, 10)
     threshold_mask = (total_misfit_grid < threshold) & valid_positive_mask
 
     threshold_indices = np.argwhere(threshold_mask)
 
-    # Check if any thresholded index is within x_min_idx and x_max_idx
-    bounded_indices = [tuple(idx) for idx in threshold_indices if x_min_Al_idx <= idx[0] <= x_max_Al_idx]
+    if len(threshold_indices) == 0:
+        return total_misfit_grid, threshold, None, dict_mix
 
-    if bounded_indices:
-        # If we have thresholded indices within bounds → use them
-        min_val = np.inf
-        min_idx = None
-        for idx in bounded_indices:
-            val = total_misfit_grid[tuple(idx)]
-            if val < min_val:
-                min_val = val
-                min_idx = tuple(idx)
-    else:
-        return total_misfit_grid, threshold, None, x_min_Al_idx, x_max_Al_idx, dict_mix
+    min_val = np.inf
+    min_idx = None
+    for idx in threshold_indices:
+        val = total_misfit_grid[tuple(idx)]
+        if val < min_val:
+            min_val = val
+            min_idx = tuple(idx)
 
-    return total_misfit_grid, threshold, min_idx, x_min_Al_idx, x_max_Al_idx, dict_mix
+    return total_misfit_grid, threshold, min_idx, dict_mix
 
 def get_enrichment_values(location, depleted_locations):
     """
@@ -306,7 +279,7 @@ def invert_single_group(df, location, count, grids, test_enrichment_values):
 
     for scale_val in test_enrichment_values:
 
-        total_misfit_grid, threshold, min_idx, x_min_Al_idx, x_max_Al_idx, dict_mix = compute_total_ree_misfit(
+        total_misfit_grid, threshold, min_idx, dict_mix = compute_total_ree_misfit(
             df=df,
             mask=mask,
             scale_val=scale_val,
@@ -382,7 +355,6 @@ def invert_single_group(df, location, count, grids, test_enrichment_values):
         "low_ree": low_ree,
         "high_ree": high_ree,
         "litho_thickness_ref": litho_thickness_ref,
-        "Al_depth_range": (x_min_Al_idx, x_max_Al_idx)
     }
 
 def remove_keys(d, keys):
@@ -441,7 +413,6 @@ def plot_results(df, location, count, result):
 
     litho_thickness_ref = result["litho_thickness_ref"]
     basalt_percentage = result["basalt_percentage"]
-    x_min_Al_idx, x_max_Al_idx = result["Al_depth_range"]
 
     masked_grid = np.ma.masked_where((best_misfit_grid <= 0) | np.isnan(best_misfit_grid), best_misfit_grid)
     # Set colormap with masked color as white
@@ -479,11 +450,6 @@ def plot_results(df, location, count, result):
     ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
     if litho_thickness_ref is not None:
         ax.axhline((litho_thickness_ref - 15) / 2, color='black', linestyle='--')
-
-    ax.fill_between([0, 100], 0, x_min_Al_idx, color='white', edgecolor='black', linewidths=1.3, alpha=0.5,
-                    linestyle='-')
-    ax.fill_between([0, 100], x_max_Al_idx, 100, color='white', edgecolor='black', linewidths=1.3, alpha=0.5,
-                    linestyle='-')
 
     ratio_of_local_global_misfit = result["ratio_of_local_global_misfit"]
 
@@ -572,12 +538,6 @@ def calibration(T, P, h, b):
         toward the G2 pyroxenite solidus, fraction x(f)=f*gamma/(f*gamma+1-f),
         gamma anchored to Sobolev et al. (2007) SOM p.S4 Eq.S3 + Table S2a
         (Hawaii-OIB: f=0.16, mean Xpx=0.64 -> gamma~9.3).
-
-        dT_end (isobaric) and dP_end (isothermal) are the same underlying
-        offset to the G2 line (dP_end = -dT_end/kG2 exactly), so applying
-        both at full strength double-counts it. w splits it instead: w=0.5
-        applies half to T, half to h, so the two corrections partition
-        rather than duplicate the single pyroxenite effect.
         """
         f = b / 100.
         x = f * gamma / (f * gamma + (1 - f))
@@ -615,7 +575,7 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
             result["location"] = location
             result["count"] = count
 
-            keys_to_be_removed = ["full_3d_grids", "misfit_grid", "threshold", "Al_depth_range", "scaling_factors",
+            keys_to_be_removed = ["full_3d_grids", "misfit_grid", "threshold", "scaling_factors",
                                   "mean_ree", "mean_ree_global", "low_ree", "high_ree", "min_idx", "global_flat_index"]
             results.append(remove_keys(result, keys_to_be_removed))
 
