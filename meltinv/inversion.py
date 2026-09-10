@@ -6,6 +6,12 @@ import numpy as np
 from .frac_correction import fractionation_correction
 from .plot_ree import plot_ree, plot_ree_range
 
+def compress_enrichment(e):
+    """Same display transform as plot_multiple_slices.py: divide negative
+    (depleted) basalt_percentage values by 100, leave enriched (>=0) as is."""
+    e = np.asarray(e, dtype=float)
+    return np.where(e < 0, e / 100, e)
+
 def source_composition_mix(basalt_perc):
     PM_1995 = {
         "La": 0.648, "Ce": 1.675, "Pr": 0.254, "Nd": 1.250, "Sm": 0.406, "Eu": 0.154,
@@ -134,7 +140,7 @@ def build_group_list(df, min_count=2):
         if row["count"] >= min_count
     ]
 
-def save_results(file_name, inv_result_df, per_sample=False):
+def save_results(file_name, inv_result_df, suffix="_group_inversion_summary_log10.xlsx"):
     base_name = Path(file_name).stem
 
     if "corrected" in base_name:
@@ -143,7 +149,6 @@ def save_results(file_name, inv_result_df, per_sample=False):
     results_dir = Path(f"inversion_results")
     results_dir.mkdir(exist_ok=True)
 
-    suffix = "_sample_inversion_summary_log10.xlsx" if per_sample else "_inversion_summary_log10.xlsx"
     output_file = results_dir / f"{base_name}{suffix}"
 
     inv_result_df.insert(0, 'location', inv_result_df.pop('location'))
@@ -560,6 +565,59 @@ def calibration(T, P, h, b):
 
     return T_cali, h_cali
 
+def aggregate_per_sample_results(results_df):
+    """
+    Island-level summary from per-sample results. For each location, the
+    same lowest-misfit subset used for the hull/mean-line in
+    plot_multiple_slices.py is selected first (all samples if N<6, else the
+    best 50% by misfit rank -- same small_n_threshold=6, min_points=3 as
+    misfit_hull/misfit_weighted_stats there), then every column is the
+    1/misfit_value-weighted mean over that subset, so results here match
+    the dashed mean lines plotted there. T_mean_cali, depth_mean_cali and
+    basalt_percentage additionally get _err_minus/_err_plus columns (mean
+    -/+ the same weighted std used for the shaded error band there);
+    basalt_percentage's error is computed in the same compressed-enrichment
+    units (compress_enrichment) plot_multiple_slices.py uses for its d-3
+    panel, not the raw basalt_percentage column's units.
+    """
+    agg_columns = ['T_mean', 'T_mean_cali', 'depth_mean', 'depth_mean_cali',
+                   'pres_mean', 'pres_min', 'pres_max', 'basalt_percentage',
+                   'misfit_value', 'global_min_value', 'ratio_of_local_global_misfit',
+                   'litho_thickness_ref']
+    err_columns = ['T_mean_cali', 'depth_mean_cali', 'basalt_percentage']
+    small_n_threshold, min_points = 6, 3
+
+    rows = []
+    for location, group in results_df.groupby('location'):
+        misfit = group['misfit_value'].to_numpy()
+        n = len(misfit)
+        pct = 100 if n < small_n_threshold else 50
+        n_keep = min(n, max(min_points, int(np.ceil(n * pct / 100))))
+        keep_idx = np.argsort(misfit)[:n_keep]
+        kept = group.iloc[keep_idx]
+        weights = 1.0 / (kept['misfit_value'].to_numpy() + 1e-6)
+
+        row = {'location': location}
+        for col in agg_columns:
+            values = pd.to_numeric(kept[col], errors='coerce').to_numpy()
+            valid = ~np.isnan(values)
+            if not valid.any():
+                row[col] = np.nan
+                continue
+            values, col_weights = values[valid], weights[valid]
+            mean = np.average(values, weights=col_weights)
+            row[col] = mean
+            if col in err_columns:
+                err_values = compress_enrichment(values) if col == 'basalt_percentage' else values
+                err_mean = np.average(err_values, weights=col_weights)
+                std = np.sqrt(np.average((err_values - err_mean) ** 2, weights=col_weights))
+                row[f'{col}_err_minus'] = err_mean - std
+                row[f'{col}_err_plus'] = err_mean + std
+        row['count'] = n
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, make_figures=False,
                           per_sample=False):
@@ -614,7 +672,13 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
     results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', T_cali)
     results.insert(results.columns.get_loc('depth_mean') + 1, 'depth_mean_cali', h_cali)
     summary_df = pd.DataFrame(results)
-    save_results(file_name, summary_df, per_sample=per_sample)
+
+    if per_sample:
+        save_results(file_name, summary_df, suffix="_sample_inversion_log10.xlsx")
+        island_summary = aggregate_per_sample_results(summary_df)
+        save_results(file_name, island_summary, suffix="_sample_inversion_summary_log10.xlsx")
+    else:
+        save_results(file_name, summary_df)
 
     return summary_df
 
