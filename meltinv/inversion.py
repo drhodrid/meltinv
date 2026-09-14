@@ -240,8 +240,8 @@ def get_enrichment_values(location, depleted_locations):
     """
     Determine enrichment range based on location name.
     """
-    extended_range = list(range(-100, 0, 10)) + list(range(0, 16))
-    default_range = list(range(0, 16))
+    extended_range = list(range(-100, 0, 5)) + np.arange(0, 15.1, 0.1).tolist()
+    default_range = np.arange(0, 15.1, 0.1).tolist()
 
     # Use extended enrichment range if location name contains any depleted keyword
     if depleted_locations is not None:
@@ -303,7 +303,7 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
             continue
 
         if global_min_value < best_result["min_misfit_value"]:
-            print('Scale:', scale_val, 'Global min misfit:', global_min_value)
+            print(f'Scale: {scale_val:.1f}', 'Global min misfit:', global_min_value)
 
             best_result.update({
                 "min_misfit_value": global_min_value,
@@ -326,13 +326,7 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
     global_flat_index = np.nanargmin(full_3d_grids)
     e_gl, p_gl, t_gl = np.unravel_index(global_flat_index, np.array(full_3d_grids).shape)
     mean_ree_global = [arr[p_gl, t_gl] for arr in simulation_concentrations]
-    if len(test_enrichment_values) > 16:
-        if e_gl <= 10:
-            dict_mix_global = source_composition_mix((e_gl - 10) * 10)
-        else:
-            dict_mix_global = source_composition_mix(e_gl - 10)
-    else:
-        dict_mix_global = source_composition_mix(e_gl)
+    dict_mix_global = source_composition_mix(test_enrichment_values[e_gl])
 
     for i, ree in enumerate(ree_variables):
         factor = best_result["scaling_factors"][ree]
@@ -353,6 +347,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
         "pres_min": average_pres_min_grid[p_idx, t_idx],
         "pres_max": average_pres_max_grid[p_idx, t_idx],
         "basalt_percentage": best_result["scale"],
+        "basalt_idx": test_enrichment_values.index(best_result["scale"]),
+        "enrichment_values": test_enrichment_values,
         "misfit_value": best_result["min_misfit_value"],
         "global_min_value": np.nanmin(full_3d_grids),
         "global_flat_index": global_flat_index,
@@ -372,6 +368,14 @@ def remove_keys(d, keys):
         keys = [keys]
     return {k: v for k, v in new_d.items() if k not in keys}
 
+def enrichment_ticks(enrichment_values):
+    """Tick positions/labels for the (possibly non-uniformly spaced) enrichment
+    axis: nearest grid index to a set of round target values."""
+    ev = np.asarray(enrichment_values, dtype=float)
+    targets = [-100, -50, 0, 5, 10, 15] if ev.min() < 0 else [0, 3, 6, 9, 12, 15]
+    ticks = sorted({int(np.abs(ev - t).argmin()) for t in targets})
+    return ticks, [f"{ev[i]:g}" for i in ticks]
+
 def plot_results(df, location, count, result):
     fig, axs = plt.subplots(2, 2, figsize=(9, 7.35), layout='constrained')
 
@@ -387,7 +391,8 @@ def plot_results(df, location, count, result):
         global_min_value = result["global_min_value"]
         global_flat_index = result["global_flat_index"]
         e_i, p_i, t_i = np.unravel_index(global_flat_index, full_3d_grid.shape)
-        basalt_idx = result["basalt_percentage"] if result["basalt_percentage"]>=0 else int(result["basalt_percentage"]/10)
+        basalt_idx = result["basalt_idx"]
+        enrichment_values = np.asarray(result["enrichment_values"], dtype=float)
 
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
                      'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
@@ -411,10 +416,10 @@ def plot_results(df, location, count, result):
 
     inv_temp = int(65 + 5 * t_idx)
     inv_thickness = int(15 + 2 * p_idx)
-    inv_basalt = int(basalt_idx)
+    inv_basalt = result["basalt_percentage"]
     ax.text(0.99, 0.987, f"{location}", ha='right', va='top', fontweight='bold', transform=ax.transAxes)
     ax.text(0.99, 0.93, f'Temperature = {inv_temp} K\nThickness = {inv_thickness} km'
-                        f'\nEnrichment Factor = {inv_basalt}', transform=ax.transAxes, ha='right', va='top', multialignment='right')
+                        f'\nEnrichment Factor = {inv_basalt:.1f}', transform=ax.transAxes, ha='right', va='top', multialignment='right')
 
     # Plot on left panel
     ax = axs[0, 1]
@@ -475,15 +480,10 @@ def plot_results(df, location, count, result):
     ax.set_xticks(ticks=x_ticks, labels=x_labels)
     ax.set_xlabel('Excess Temperature (K)')
 
-    if best_misfit_grid.shape[0] > 16:
-        y_ticks = np.arange(0, 26, 5)
-        y_labels = [i*5 - 10 for i in range(6)]
-        ax.set_yticks(ticks=y_ticks, labels=y_labels)
-        ax.plot(t_i, e_i + 10, marker='o', color='orange', markersize=10)
-        ax.plot(t_idx, basalt_idx + 10, marker='*', color='red', markersize=10)
-    else:
-        ax.plot(t_i, e_i, marker='o', color='orange', markersize=10)
-        ax.plot(t_idx, basalt_idx, marker='*', color='red', markersize=10)
+    y_ticks, y_labels = enrichment_ticks(enrichment_values)
+    ax.set_yticks(ticks=y_ticks, labels=y_labels)
+    ax.plot(t_i, e_i, marker='o', color='orange', markersize=10)
+    ax.plot(t_idx, basalt_idx, marker='*', color='red', markersize=10)
 
     ax.set_ylabel('Relative Enrichment')
 
@@ -497,19 +497,14 @@ def plot_results(df, location, count, result):
     ax.set_xlim(0, ny)
 
     x_ticks = np.arange(0, ny, 10)
-    x_labels = 15 + 2 * y_ticks
+    x_labels = 15 + 2 * x_ticks
     ax.set_xticks(ticks=x_ticks, labels=x_labels)
     ax.set_xlabel('Lithospheric thickness (km)')
 
-    if best_misfit_grid.shape[0] > 16:
-        y_ticks = np.arange(0, 26, 5)
-        y_labels = [i*5 - 10 for i in range(6)]
-        ax.set_yticks(ticks=y_ticks, labels=y_labels)
-        ax.plot(p_i, e_i + 10, marker='o', color='orange', markersize=10)
-        ax.plot(p_idx, basalt_idx + 10, marker='*', color='red', markersize=10)
-    else:
-        ax.plot(p_i, e_i, marker='o', color='orange', markersize=10)
-        ax.plot(p_idx, basalt_idx, marker='*', color='red', markersize=10)
+    y_ticks, y_labels = enrichment_ticks(enrichment_values)
+    ax.set_yticks(ticks=y_ticks, labels=y_labels)
+    ax.plot(p_i, e_i, marker='o', color='orange', markersize=10)
+    ax.plot(p_idx, basalt_idx, marker='*', color='red', markersize=10)
 
     if litho_thickness_ref is not None:
         ax.axvline((litho_thickness_ref - 15) / 2, color='black', linestyle='--')
@@ -648,7 +643,8 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
             result["count"] = count
 
             keys_to_be_removed = ["full_3d_grids", "misfit_grid", "threshold", "scaling_factors",
-                                  "mean_ree", "mean_ree_global", "low_ree", "high_ree", "min_idx", "global_flat_index"]
+                                  "mean_ree", "mean_ree_global", "low_ree", "high_ree", "min_idx", "global_flat_index",
+                                  "basalt_idx", "enrichment_values"]
             results.append(remove_keys(result, keys_to_be_removed))
 
             if make_figures == True:
