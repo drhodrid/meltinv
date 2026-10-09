@@ -239,9 +239,19 @@ def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
 def get_enrichment_values(location, depleted_locations):
     """
     Determine enrichment range based on location name.
+    depleted_locations may be None, a list of location keywords, or 'all'
+    (every location uses the extended depleted range).
     """
     extended_range = list(range(-100, 0, 5)) + np.arange(0, 15.1, 0.1).tolist()
     default_range = np.arange(0, 15.1, 0.1).tolist()
+
+    if isinstance(depleted_locations, str):
+        depleted_locations = [depleted_locations]
+
+    # 'all' applies the extended enrichment range to every location
+    if depleted_locations is not None and any(
+            str(keyword).lower() == 'all' for keyword in depleted_locations):
+        return extended_range
 
     # Use extended enrichment range if location name contains any depleted keyword
     if depleted_locations is not None:

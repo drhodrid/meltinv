@@ -94,7 +94,7 @@ meltinv.invert(
 	
 	(iii) Samples from the same location are treated as a group.
     
-- `depleted_locations`: Optional **list** of locations that may represent depleted mantle sources. For these locations, the inversion considers an expanded range of source compositions. In addition to mixing basalts with primitive mantle, it also allows contributions from a depleted mantle endmember when estimating the source composition.
+- `depleted_locations`: Optional **list** of locations that may represent depleted mantle sources. For these locations, the inversion considers an expanded range of source compositions. In addition to mixing basalts with primitive mantle, it also allows contributions from a depleted mantle endmember when estimating the source composition. Use `depleted_locations='all'` to apply the expanded range to every location without listing them.
     
 -   `correction`: Whether to perform fractionation correction before inversion
     
@@ -142,7 +142,7 @@ meltinv invert <file_name> [options]
 -   `file_name` (required)
     
 -   `--depleted` (optional):  
-    One or more location names treated as depleted mantle sources. For these locations, the inversion considers an expanded range of source compositions, including a depleted mantle endmember.
+    One or more location names treated as depleted mantle sources. For these locations, the inversion considers an expanded range of source compositions, including a depleted mantle endmember. Use `--depleted all` to apply this to every location.
     
 -   `--correction` (optional):  
     If specified, performs fractionation correction before inversion.
@@ -162,6 +162,10 @@ meltinv invert input.xlsx
 Run inversion with depleted mantle locations:
 ```bash
 meltinv invert input.csv --depleted Iceland Galapagos
+```
+Run inversion treating every location as a possible depleted source:
+```bash
+meltinv invert input.csv --depleted all
 ```
 Run inversion with fractionation correction:
 ```bash
