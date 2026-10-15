@@ -130,6 +130,12 @@ def load_all_grids():
         "pres_mean": load_data_file("melt_average_pres.npy"),
         "pres_min": load_data_file("melt_min_pres.npy"),
         "pres_max": load_data_file("melt_max_pres.npy"),
+        "F_mean": load_data_file("ree_average_F.npy"),
+        "F_min": load_data_file("ree_min_F.npy"),
+        "F_max": load_data_file("ree_max_F.npy"),
+        "M_mean": load_data_file("ree_average_M.npy"),
+        "M_min": load_data_file("ree_min_M.npy"),
+        "M_max": load_data_file("ree_max_M.npy"),
     }
 
 def build_group_list(df, min_count=2):
@@ -356,6 +362,12 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
         "pres_mean": average_pres_grid[p_idx, t_idx],
         "pres_min": average_pres_min_grid[p_idx, t_idx],
         "pres_max": average_pres_max_grid[p_idx, t_idx],
+        "F_mean": grids["F_mean"][p_idx, t_idx],
+        "F_min": grids["F_min"][p_idx, t_idx],
+        "F_max": grids["F_max"][p_idx, t_idx],
+        "M_mean": grids["M_mean"][p_idx, t_idx],
+        "M_min": grids["M_min"][p_idx, t_idx],
+        "M_max": grids["M_max"][p_idx, t_idx],
         "basalt_percentage": best_result["scale"],
         "basalt_idx": test_enrichment_values.index(best_result["scale"]),
         "enrichment_values": test_enrichment_values,
@@ -586,7 +598,8 @@ def aggregate_per_sample_results(results_df):
     panel, not the raw basalt_percentage column's units.
     """
     agg_columns = ['T_mean', 'T_mean_cali', 'depth_mean', 'depth_mean_cali',
-                   'pres_mean', 'pres_min', 'pres_max', 'basalt_percentage',
+                   'pres_mean_cali', 'pres_min_cali', 'pres_max_cali',
+                   'F_mean', 'F_min', 'F_max', 'M_mean', 'M_min', 'M_max', 'basalt_percentage',
                    'misfit_value', 'global_min_value', 'ratio_of_local_global_misfit',
                    'litho_thickness_ref']
     err_columns = ['T_mean_cali', 'depth_mean_cali', 'basalt_percentage']
@@ -677,6 +690,12 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
 
     results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', T_cali)
     results.insert(results.columns.get_loc('depth_mean') + 1, 'depth_mean_cali', h_cali)
+
+    # Shift melting pressures by the same amount as the calibrated depth
+    for col in ['pres_mean', 'pres_min', 'pres_max']:
+        results[col] = results[col] + (h_cali - depth_mean)
+    results = results.rename(columns={'pres_mean': 'pres_mean_cali', 'pres_min': 'pres_min_cali',
+                                      'pres_max': 'pres_max_cali'})
     summary_df = pd.DataFrame(results)
 
     if per_sample:
