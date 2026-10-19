@@ -12,6 +12,21 @@ def compress_enrichment(e):
     e = np.asarray(e, dtype=float)
     return np.where(e < 0, e / 100, e)
 
+
+def misfit_weighted_stats(values, misfit, small_n_threshold=6, min_points=3):
+    """
+    Misfit-weighted mean and std over the lowest-misfit subset (all samples
+    if N < small_n_threshold, else the best 50%), weighted by 1/misfit.
+    """
+    values, misfit = np.asarray(values, dtype=float), np.asarray(misfit, dtype=float)
+    pct = 100 if len(misfit) < small_n_threshold else 50
+    n_keep = min(len(misfit), max(min_points, int(np.ceil(len(misfit) * pct / 100))))
+    keep_idx = np.argsort(misfit)[:n_keep]
+    v, w = values[keep_idx], 1.0 / (misfit[keep_idx] + 1e-6)
+    mean = np.average(v, weights=w)
+    std = np.sqrt(np.average((v - mean) ** 2, weights=w))
+    return mean, std
+
 def source_composition_mix(basalt_perc):
     PM_1995 = {
         "La": 0.648, "Ce": 1.675, "Pr": 0.254, "Nd": 1.250, "Sm": 0.406, "Eu": 0.154,
@@ -636,9 +651,93 @@ def aggregate_per_sample_results(results_df):
 
     return pd.DataFrame(rows)
 
+
+def plot_group_comparison(results_df, min_count=3):
+    """
+    For each location, compare the per-sample inversion results: pairwise
+    scatter plots of temperature, thickness and enrichment coloured by misfit,
+    plus histograms with the misfit-weighted mean (dashed) and +/- 1 std band.
+    Locations with fewer than min_count samples are skipped.
+    """
+    results_dir = Path("inversion_figures")
+    results_dir.mkdir(exist_ok=True)
+
+    for location, group in results_df.groupby("location"):
+        group_number = len(group)
+        if group_number < min_count:
+            print(f"Skipping group comparison figure for {location}: "
+                  f"{group_number} sample(s), at least {min_count} needed.")
+            continue
+
+        thickness = group["depth_mean_cali"].to_numpy(dtype=float)
+        temperature = group["T_mean_cali"].to_numpy(dtype=float)
+        enrichment = compress_enrichment(group["basalt_percentage"])
+        misfit = group["misfit_value"].to_numpy(dtype=float)
+        misfit_kwargs = dict(c=misfit * 100, cmap="Blues_r", vmin=0.0, vmax=3, edgecolors="k")
+        label_size = 8
+
+        fig, axs = plt.subplots(2, 2, figsize=(9, 7))
+
+        ax = axs[0, 0]
+        ax.scatter(temperature, thickness, **misfit_kwargs)
+        ax.set_ylabel("Lithospheric Thickness (km)")
+        ax.set_xlabel("Excess Temperature (K)")
+        ax.set_ylim(15, 130)
+        ax.set_xlim(50, 300)
+        ax.text(0.02, 0.97, "(a)", transform=ax.transAxes, va="top", ha="left")
+
+        ax = axs[0, 1]
+        sc = ax.scatter(enrichment, thickness, **misfit_kwargs)
+        ax.set_ylabel("Thickness (km)")
+        ax.set_xlabel("Relative Enrichment")
+        ax.set_ylim(15, 130)
+        ax.set_xlim(-1.2, 16)
+        cbar = fig.colorbar(sc, ax=ax)
+        cbar.ax.tick_params(labelsize=label_size)
+        cbar.set_ticks(np.linspace(0, 3, 7))
+        cbar.set_label(r"Misfit (×10$^{-2}$)", fontsize=label_size)
+        ax.text(0.02, 0.97, "(b)", transform=ax.transAxes, va="top", ha="left")
+
+        ax = axs[1, 0]
+        ax.scatter(temperature, enrichment, **misfit_kwargs)
+        ax.set_ylabel("Relative Enrichment")
+        ax.set_xlabel("Excess Temperature (K)")
+        ax.set_ylim(-1.2, 16)
+        ax.set_xlim(50, 300)
+        ax.text(0.02, 0.97, "(c)", transform=ax.transAxes, va="top", ha="left")
+
+        subspec = axs[1, 1].get_subplotspec()
+        axs[1, 1].remove()
+        gs_sub = subspec.subgridspec(3, 1, hspace=0.7)
+
+        histograms = [
+            (temperature, np.linspace(50, 300, 26), "orange", (50, 300), "(d-1) Excess Temperature (K)"),
+            (thickness, np.linspace(15, 130, 26), "steelblue", (15, 130), "(d-2) Lithospheric Thickness (km)"),
+            (enrichment, np.linspace(-1., 16, 18), "seagreen", (-1.2, 16), "(d-3) Relative Enrichment"),
+        ]
+        for i, (values, bins, color, xlim, title) in enumerate(histograms):
+            mean, std = misfit_weighted_stats(values, misfit)
+            ax = fig.add_subplot(gs_sub[i])
+            ax.tick_params(axis="both", labelsize=label_size)
+            ax.hist(values, bins=bins, color=color, edgecolor="black")
+            ax.axvspan(mean - std, mean + std, color="black", alpha=0.15)
+            ax.axvline(mean, color="black", linestyle="--", linewidth=1.5)
+            ax.set_xlim(*xlim)
+            ax.text(0.0, 1.02, title, transform=ax.transAxes,
+                    va="bottom", ha="left", fontsize=label_size + 1)
+
+        fig.suptitle(f"{location} (N={group_number})")
+        fig.tight_layout(pad=0.5, w_pad=0.3, h_pad=0.3)
+
+        output_file = results_dir / f"group_comparison_{location}_N{group_number}.png"
+        plt.savefig(output_file, dpi=350)
+        print(f"Figure saved to: {output_file.resolve()}")
+        plt.close(fig)
+
+
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
-                          src_Fo=0.9, max_olivine_addition=0.4, make_figures=False,
-                          per_sample=False):
+                          src_Fo=0.9, max_olivine_addition=0.4, individual_sample_figures=False,
+                          group_comparison_figure=True, per_sample=False):
     if correction == False:
         df = read_melt_composition(file_name)
     else:
@@ -678,7 +777,7 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
                                   "basalt_idx", "enrichment_values"]
             results.append(remove_keys(result, keys_to_be_removed))
 
-            if make_figures == True:
+            if individual_sample_figures:
                 plot_results(df, location, count, result)
 
     results = pd.DataFrame(results)
@@ -710,6 +809,8 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
         save_results(file_name, summary_df, suffix="_sample_inversion_log10.xlsx")
         island_summary = aggregate_per_sample_results(summary_df)
         save_results(file_name, island_summary, suffix="_sample_inversion_summary_log10.xlsx")
+        if group_comparison_figure:
+            plot_group_comparison(summary_df)
     else:
         save_results(file_name, summary_df)
 

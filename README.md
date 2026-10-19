@@ -127,23 +127,23 @@ You can either invert a file that is already corrected, or correct and invert in
 **Option A: correct and invert in one command** (recommended for the example):
 
 ```bash
-meltinv invert examples.xlsx --correction --make_figures
+meltinv invert examples.xlsx --correction --individual_sample_figures
 ```
 
 ```python
 import meltinv
 
-results = meltinv.invert("examples.xlsx", correction=True, make_figures=True)
+results = meltinv.invert("examples.xlsx", correction=True, individual_sample_figures=True)
 ```
 
 **Option B: invert data that is already primary**, such as the output of Step 2:
 
 ```bash
-meltinv invert inversion_results/examples_corrected.xlsx --make_figures
+meltinv invert inversion_results/examples_corrected.xlsx --individual_sample_figures
 ```
 
 ```python
-results = meltinv.invert("inversion_results/examples_corrected.xlsx", make_figures=True)
+results = meltinv.invert("inversion_results/examples_corrected.xlsx", individual_sample_figures=True)
 ```
 
 While it runs, meltinv prints each location (in alphabetical order) and its sample count, followed by every enrichment value that improves the fit. With `--correction`, meltPT first prints a long log of the olivine addition. The example takes under a minute.
@@ -192,7 +192,11 @@ All output columns:
 
 ### Step 5: Reading the figures
 
-With `--make_figures`, one PNG per location is saved to `inversion_figures/ree_comparison_{location}_log10_N{count}.png`. Each figure has four panels:
+meltinv can make two kinds of figure. Both are saved in `inversion_figures/`.
+
+#### Individual figures (`--individual_sample_figures`)
+
+With `--individual_sample_figures`, one PNG per location is saved to `inversion_figures/ree_comparison_{location}_log10_N{count}.png`. Each figure has four panels:
 
 | Panel | What it shows |
 |---|---|
@@ -251,7 +255,22 @@ How the location summary is built:
 2. Every column is averaged with weights of `1 / misfit_value`.
 3. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
 
-With `--make_figures`, per-sample mode makes one figure per sample, named `ree_comparison_{location}__sample{n}_log10_N1.png`.
+#### Group comparison figures
+
+In per-sample mode, meltinv also makes one **group comparison figure** per location by default. It is saved as `inversion_figures/group_comparison_{location}_N{count}.png` and compares the per-sample results within that location:
+
+| Panel | What it shows |
+|---|---|
+| **(a)** | Excess temperature vs lithospheric thickness, one point per sample |
+| **(b)** | Relative enrichment vs lithospheric thickness |
+| **(c)** | Excess temperature vs relative enrichment |
+| **(d-1) to (d-3)** | Histograms of temperature, thickness and enrichment. The dashed line is the misfit-weighted mean and the grey band is ± 1 weighted standard deviation, computed the same way as the location summary above. |
+
+In panels (a) to (c), points are coloured by misfit; darker blue is a better fit. Depleted enrichment values (negative) are divided by 100 so they fit on the same axis. Locations with fewer than 3 samples are skipped, with a message. The axes are fixed (temperature 50 to 300 K, thickness 15 to 130 km, enrichment −1.2 to 16) so that figures for different locations can be compared directly; samples outside these ranges are not shown.
+
+To turn this figure off, use `--no_group_comparison_figure` (Python: `group_comparison_figure=False`).
+
+With `--individual_sample_figures`, per-sample mode also makes one individual figure per sample, named `ree_comparison_{location}__sample{n}_log10_N1.png`. For large datasets this can be many files.
 
 ### Using the results in Python
 
@@ -290,7 +309,8 @@ Returns the corrected DataFrame and writes `inversion_results/{name}_corrected.x
 
 ```python
 meltinv.invert(file_name, depleted_locations=None, correction=False, src_Fo=0.9,
-               max_olivine_addition=0.5, make_figures=False, per_sample=False)
+               max_olivine_addition=0.5, individual_sample_figures=False,
+               group_comparison_figure=True, per_sample=False)
 ```
 
 | Argument | Default | Description |
@@ -300,7 +320,8 @@ meltinv.invert(file_name, depleted_locations=None, correction=False, src_Fo=0.9,
 | `correction` | `False` | Run the fractionation correction first |
 | `src_Fo` | `0.9` | Used only when `correction=True` |
 | `max_olivine_addition` | `0.5` | Used only when `correction=True` |
-| `make_figures` | `False` | Save a 4-panel PNG for each group or sample |
+| `individual_sample_figures` | `False` | Save a 4-panel REE and misfit figure for each group (group mode) or each sample (per-sample mode). The old name `make_figures` still works. |
+| `group_comparison_figure` | `True` | In per-sample mode, save a group comparison figure for each location with ≥ 3 samples. Ignored in group mode. |
 | `per_sample` | `False` | Invert each sample individually instead of each location |
 
 Returns the results as a pandas DataFrame.
@@ -312,10 +333,11 @@ meltinv correction FILE [--src_Fo 0.9] [--max_olivine_addition 0.5]
 
 meltinv invert FILE [--depleted LOC [LOC ...] | --depleted all]
                     [--correction] [--src_Fo 0.9] [--max_olivine_addition 0.5]
-                    [--make_figures] [--per_sample]
+                    [--individual_sample_figures] [--no_group_comparison_figure]
+                    [--per_sample]
 ```
 
-The command-line flags map one-to-one onto the Python arguments above.
+The command-line flags map onto the Python arguments above. `--no_group_comparison_figure` is the same as `group_comparison_figure=False`, and the old `--make_figures` flag still works as `--individual_sample_figures`.
 
 ### Output files
 
@@ -327,7 +349,8 @@ All paths are relative to the current working directory. `{name}` is the input f
 | `inversion_results/{name}_group_inversion_summary_log10.xlsx` | `invert` (group mode) |
 | `inversion_results/{name}_sample_inversion_log10.xlsx` | `invert --per_sample` |
 | `inversion_results/{name}_sample_inversion_summary_log10.xlsx` | `invert --per_sample` |
-| `inversion_figures/ree_comparison_{location}_log10_N{count}.png` | `invert --make_figures` |
+| `inversion_figures/ree_comparison_{location}_log10_N{count}.png` | `invert --individual_sample_figures` |
+| `inversion_figures/group_comparison_{location}_N{count}.png` | `invert --per_sample` (unless `--no_group_comparison_figure`) |
 
 Existing files with the same name are overwritten.
 
