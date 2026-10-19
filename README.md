@@ -79,6 +79,12 @@ meltinv reads **`.xlsx`** or **`.csv`** files with one row per sample. Extra col
 | `location` | Location label. Samples with the same `location` are summarised and plotted together. |
 | `La`, `Ce`, `Pr`, `Nd`, `Sm`, `Eu`, `Gd`, `Tb`, `Dy`, `Ho`, `Er`, `Tm`, `Yb`, `Lu` | REE concentrations (ppm) |
 
+For the REE columns:
+
+- Missing values are fine. Blank cells, `0`, negative values and text (such as `bdl`) are all treated as missing.
+- Each sample is fitted using whichever of the 14 REE it has values for.
+- At least 6 values are required for one sample to be inverted.
+
 **Required only if you run the fractionation correction (Step 2):**
 
 | Column | Meaning |
@@ -91,10 +97,6 @@ meltinv reads **`.xlsx`** or **`.csv`** files with one row per sample. Extra col
 |---|---|
 | `thickness` | An independent estimate of lithospheric thickness (km), for example from seismology. It is **not** used in the inversion. It is reported as `litho_thickness_ref` and drawn as a dashed line on the individual figures for comparison. |
 
-Tips for the REE columns:
-
-- Missing values are fine. Blank cells, `0`, negative values and text (such as `bdl`) are all treated as missing.
-- Each sample is fitted using whichever of the 14 REE it has values for.
 
 ### Step 2: (Optional) Fractionation correction
 
