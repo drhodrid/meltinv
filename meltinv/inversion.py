@@ -644,6 +644,14 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
     else:
         df = fractionation_correction(file_name, src_Fo, max_olivine_addition)
 
+    # Treat zero, negative and non-numeric REE values as missing
+    ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
+                     'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
+    df = df.copy()
+    for ree in ree_variables:
+        values = pd.to_numeric(df[ree], errors='coerce')
+        df[ree] = values.where(values > 0)
+
     if per_sample:
         df = df.copy()
         sample_number = df.groupby("location").cumcount() + 1
