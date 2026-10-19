@@ -4,18 +4,24 @@ from .frac_correction import fractionation_correction
 
 def invert(file_name, depleted_locations=None, correction=False, src_Fo=0.9,
            max_olivine_addition=0.5, individual_sample_figures=False,
-           group_comparison_figure=True, per_sample=False, make_figures=None):
+           group_comparison_figure=True, make_figures=None, per_sample=True):
     """
-    High-level API for melt inversion.
+    High-level API for melt inversion. Every sample is inverted individually.
 
     make_figures is kept for backward compatibility; it sets individual_sample_figures.
+    per_sample is kept for backward compatibility; only True is supported here.
     """
+    if not per_sample:
+        raise ValueError(
+            "Group inversion (per_sample=False) is not available on this version. "
+            "Install the 'group_samples' branch of meltinv to invert groups of samples.")
+
     if make_figures is not None:
         individual_sample_figures = make_figures
 
     summary_df = invert_melt_condition(file_name, depleted_locations, correction,
                           src_Fo, max_olivine_addition, individual_sample_figures,
-                          group_comparison_figure, per_sample)
+                          group_comparison_figure)
 
     return summary_df
 

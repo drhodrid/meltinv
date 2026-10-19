@@ -30,7 +30,8 @@ def main():
     parser_inv.add_argument("--individual_sample_figures", "--make_figures", action="store_true")
     parser_inv.add_argument("--no_group_comparison_figure", dest="group_comparison_figure",
                             action="store_false")
-    parser_inv.add_argument("--per_sample", action="store_true")
+    # Every sample is always inverted individually; --per_sample is accepted and ignored
+    parser_inv.add_argument("--per_sample", action="store_true", help=argparse.SUPPRESS)
 
     args = parser.parse_args()
 
@@ -52,8 +53,7 @@ def main():
             src_Fo=args.src_Fo,
             max_olivine_addition=args.max_olivine_addition,
             individual_sample_figures=args.individual_sample_figures,
-            group_comparison_figure=args.group_comparison_figure,
-            per_sample=args.per_sample
+            group_comparison_figure=args.group_comparison_figure
         )
 
 

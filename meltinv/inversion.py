@@ -737,7 +737,7 @@ def plot_group_comparison(results_df, min_count=3):
 
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, individual_sample_figures=False,
-                          group_comparison_figure=True, per_sample=False):
+                          group_comparison_figure=True):
     if correction == False:
         df = read_melt_composition(file_name)
     else:
@@ -751,22 +751,21 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
         values = pd.to_numeric(df[ree], errors='coerce')
         df[ree] = values.where(values > 0)
 
-    if per_sample:
-        df = df.copy()
-        sample_number = df.groupby("location").cumcount() + 1
-        original_location = df["location"]
-        original_position = range(len(df))
-        df["location"] = original_location.astype(str) + "__sample" + sample_number.astype(str)
-        location_map = dict(zip(df["location"], zip(original_location, sample_number, original_position)))
+    # Invert every sample on its own: give each sample a unique location label
+    sample_number = df.groupby("location").cumcount() + 1
+    original_location = df["location"]
+    original_position = range(len(df))
+    df["location"] = original_location.astype(str) + "__sample" + sample_number.astype(str)
+    location_map = dict(zip(df["location"], zip(original_location, sample_number, original_position)))
 
-    group_list = build_group_list(df, min_count=1 if per_sample else 2)
+    group_list = build_group_list(df, min_count=1)
     grids = load_all_grids()
     results = []
     for g_i, group in enumerate(group_list):
         location, count = group
         test_enrichment_values = get_enrichment_values(location, depleted_location)
         result = invert_single_group(df, location, count, grids, test_enrichment_values,
-                                     min_sample_count=1 if per_sample else 2)
+                                     min_sample_count=1)
 
         if result is not None:
             result["location"] = location
@@ -782,11 +781,10 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
 
     results = pd.DataFrame(results)
 
-    if per_sample:
-        results["sample_number"] = results["location"].map(lambda x: location_map[x][1])
-        results["_original_position"] = results["location"].map(lambda x: location_map[x][2])
-        results["location"] = results["location"].map(lambda x: location_map[x][0])
-        results = results.sort_values("_original_position").drop(columns="_original_position").reset_index(drop=True)
+    results["sample_number"] = results["location"].map(lambda x: location_map[x][1])
+    results["_original_position"] = results["location"].map(lambda x: location_map[x][2])
+    results["location"] = results["location"].map(lambda x: location_map[x][0])
+    results = results.sort_values("_original_position").drop(columns="_original_position").reset_index(drop=True)
 
     T_mean = results['T_mean']
     P_mean = results['pres_mean']
@@ -805,14 +803,11 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
                                       'pres_max': 'pres_max_cali'})
     summary_df = pd.DataFrame(results)
 
-    if per_sample:
-        save_results(file_name, summary_df, suffix="_sample_inversion_log10.xlsx")
-        island_summary = aggregate_per_sample_results(summary_df)
-        save_results(file_name, island_summary, suffix="_sample_inversion_summary_log10.xlsx")
-        if group_comparison_figure:
-            plot_group_comparison(summary_df)
-    else:
-        save_results(file_name, summary_df)
+    save_results(file_name, summary_df, suffix="_sample_inversion_log10.xlsx")
+    island_summary = aggregate_per_sample_results(summary_df)
+    save_results(file_name, island_summary, suffix="_sample_inversion_summary_log10.xlsx")
+    if group_comparison_figure:
+        plot_group_comparison(summary_df)
 
     return summary_df
 

@@ -8,6 +8,10 @@
 
 It also reports the melt fraction (`F`) and melting rate (`M`) of the best-fitting model.
 
+Every sample is inverted **individually**. The results are then summarised for each location, and a figure compares the samples within each location.
+
+> Looking for the version that fits one solution to a whole group of samples? It lives on the [`group_samples` branch](#group-inversion-the-group_samples-branch).
+
 The package can be used from the **command line** or from **Python**. This README is written as a step-by-step tutorial. Work through it once with the bundled example file, then swap in your own data.
 
 ---
@@ -23,8 +27,8 @@ The package can be used from the **command line** or from **Python**. This READM
    - [Step 5: Reading the figures](#step-5-reading-the-figures)
 3. [Going further](#3-going-further)
    - [Depleted mantle sources](#depleted-mantle-sources)
-   - [Inverting each sample individually](#inverting-each-sample-individually)
    - [Using the results in Python](#using-the-results-in-python)
+   - [Group inversion: the group_samples branch](#group-inversion-the-group_samples-branch)
 4. [Reference](#4-reference)
 5. [How the inversion works](#5-how-the-inversion-works)
 6. [Troubleshooting](#6-troubleshooting)
@@ -72,7 +76,7 @@ meltinv reads **`.xlsx`** or **`.csv`** files with one row per sample. Extra col
 
 | Column | Meaning |
 |---|---|
-| `location` | Group label. Samples with the same `location` are inverted together. |
+| `location` | Location label. Samples with the same `location` are summarised and plotted together. |
 | `La`, `Ce`, `Pr`, `Nd`, `Sm`, `Eu`, `Gd`, `Tb`, `Dy`, `Ho`, `Er`, `Tm`, `Yb`, `Lu` | REE concentrations (ppm) |
 
 **Required only if you run the fractionation correction (Step 2):**
@@ -85,12 +89,12 @@ meltinv reads **`.xlsx`** or **`.csv`** files with one row per sample. Extra col
 
 | Column | Meaning |
 |---|---|
-| `thickness` | An independent estimate of lithospheric thickness (km), for example from seismology. It is **not** used in the inversion. Its group mean is reported as `litho_thickness_ref` and drawn as a dashed line on the figures for comparison. |
+| `thickness` | An independent estimate of lithospheric thickness (km), for example from seismology. It is **not** used in the inversion. It is reported as `litho_thickness_ref` and drawn as a dashed line on the individual figures for comparison. |
 
 Tips for the REE columns:
 
 - Missing values are fine. Blank cells, `0`, negative values and text (such as `bdl`) are all treated as missing.
-- In group mode, an element is only used for a location if at least **2** samples in that group have a value for it. In per-sample mode the limit is 1.
+- Each sample is fitted using whichever of the 14 REE it has values for.
 
 ### Step 2: (Optional) Fractionation correction
 
@@ -127,56 +131,74 @@ You can either invert a file that is already corrected, or correct and invert in
 **Option A: correct and invert in one command** (recommended for the example):
 
 ```bash
-meltinv invert examples.xlsx --correction --individual_sample_figures
+meltinv invert examples.xlsx --correction
 ```
 
 ```python
 import meltinv
 
-results = meltinv.invert("examples.xlsx", correction=True, individual_sample_figures=True)
+results = meltinv.invert("examples.xlsx", correction=True)
 ```
 
 **Option B: invert data that is already primary**, such as the output of Step 2:
 
 ```bash
-meltinv invert inversion_results/examples_corrected.xlsx --individual_sample_figures
+meltinv invert inversion_results/examples_corrected.xlsx
 ```
 
 ```python
-results = meltinv.invert("inversion_results/examples_corrected.xlsx", individual_sample_figures=True)
+results = meltinv.invert("inversion_results/examples_corrected.xlsx")
 ```
 
-While it runs, meltinv prints each location (in alphabetical order) and its sample count, followed by every enrichment value that improves the fit. With `--correction`, meltPT first prints a long log of the olivine addition. The example takes under a minute.
+While it runs, meltinv prints each sample (labelled `{location}__sample{n}`), followed by every enrichment value that improves the fit. With `--correction`, meltPT first prints a long log of the olivine addition. The example takes about a minute.
 
 ```text
-Austral-Cook Islands (Atiu) Sample number: 3
+Austral-Cook Islands (Atiu)__sample1 Sample number: 1
 Scale: 0.0 Global min misfit: ...
 Scale: 0.1 Global min misfit: ...
 ...
-Figure saved to: .../inversion_figures/ree_comparison_Austral-Cook Islands (Atiu)_log10_N3.png
-Austral-Cook Islands (Mangaia) Sample number: 14
+Results saved to: .../inversion_results/examples_sample_inversion_log10.xlsx
+Results saved to: .../inversion_results/examples_sample_inversion_summary_log10.xlsx
+Figure saved to: .../inversion_figures/group_comparison_Austral-Cook Islands (Atiu)_N3.png
 ...
-Results saved to: .../inversion_results/examples_group_inversion_summary_log10.xlsx
+Skipping group comparison figure for Austral-Cook Islands (Marotiri): 1 sample(s), at least 3 needed.
 ```
 
-Notice that **Marotiri is missing from the output**. It has only one sample, and group mode needs **at least 2 samples per location**. To include single samples, see [per-sample mode](#inverting-each-sample-individually).
+Marotiri has only one sample. It is still inverted and appears in both results files, but it is too small for a group comparison figure.
 
 ### Step 4: Reading the results
 
-The summary is saved to `inversion_results/examples_group_inversion_summary_log10.xlsx`. There is one row per location. For the example, the main columns look like this:
+The inversion writes two results files.
 
-| location | count | T_mean_cali (K) | depth_mean_cali (km) | basalt_percentage | litho_thickness_ref (km) |
-|---|---|---|---|---|---|
-| Austral-Cook Islands (Atiu) | 3 | 70.5 | 58.7 | 4.0 | 86.7 |
-| Austral-Cook Islands (Mangaia) | 14 | 91.8 | 54.2 | 1.1 | 83.4 |
-| Austral-Cook Islands (Raivavae) | 14 | 92.6 | 50.7 | 0.3 | 73.7 |
-| Austral-Cook Islands (Rapa) | 6 | 172.2 | 94.3 | 4.6 | 67.9 |
+**1. Location summary:** `inversion_results/examples_sample_inversion_summary_log10.xlsx`
 
-All output columns:
+This file has one row per location, made by combining the per-sample results:
+
+1. For locations with fewer than 6 samples, all samples are kept. Otherwise, the best 50% by misfit are kept, and never fewer than 3.
+2. Every column is averaged with weights of `1 / misfit_value`.
+3. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
+
+For the example, the main columns look like this:
+
+| location | count | T_mean_cali (K) | T range (K) | depth_mean_cali (km) | depth range (km) | basalt_percentage | litho_thickness_ref (km) |
+|---|---|---|---|---|---|---|---|
+| Austral-Cook Islands (Atiu) | 3 | 72.5 | 67.6–77.4 | 57.4 | 54.2–60.5 | 3.6 | 86.7 |
+| Austral-Cook Islands (Mangaia) | 14 | 102.2 | 85.1–119.2 | 56.8 | 53.3–60.3 | 2.1 | 83.5 |
+| Austral-Cook Islands (Marotiri) | 1 | 107.5 | — | 60.8 | — | 2.7 | 68.3 |
+| Austral-Cook Islands (Raivavae) | 14 | 97.6 | 59.9–135.3 | 64.5 | 49.4–79.6 | 4.4 | 73.8 |
+| Austral-Cook Islands (Rapa) | 6 | 171.7 | 131.9–211.5 | 91.2 | 77.2–105.2 | 4.3 | 67.9 |
+
+The ranges are the `_err_minus` to `_err_plus` columns.
+
+**2. Per-sample results:** `inversion_results/examples_sample_inversion_log10.xlsx`
+
+This file has one row per sample, in the same order as your input file. `sample_number` counts samples (1, 2, …) within each location.
+
+Both files share these columns:
 
 | Column | Meaning |
 |---|---|
-| `location`, `count` | Group name and number of samples in it |
+| `location`, `count` | Location name. In the summary file, `count` is the number of samples at that location; in the per-sample file it is always 1. |
 | `T_mean` | Best-fit mantle excess temperature (K) from the peridotite melting grid |
 | `T_mean_cali` | `T_mean` after the source-lithology calibration (see [§5](#5-how-the-inversion-works)). **Use this value.** |
 | `depth_mean` | Best-fit lithospheric thickness (km) from the grid |
@@ -188,19 +210,42 @@ All output columns:
 | `misfit_value` | Misfit of the best-fit model (lower is better) |
 | `global_min_value` | Lowest misfit anywhere in the full temperature–thickness–enrichment search |
 | `ratio_of_local_global_misfit` | `misfit_value / global_min_value`. A value of 1 means the reported solution is the global minimum. |
-| `litho_thickness_ref` | Mean of your optional `thickness` column (empty if not supplied) |
+| `litho_thickness_ref` | Your optional `thickness` value (empty if not supplied) |
 
 ### Step 5: Reading the figures
 
 meltinv can make two kinds of figure. Both are saved in `inversion_figures/`.
 
-#### Individual figures (`--individual_sample_figures`)
+#### Group comparison figures (on by default)
 
-With `--individual_sample_figures`, one PNG per location is saved to `inversion_figures/ree_comparison_{location}_log10_N{count}.png`. Each figure has four panels:
+One figure per location is saved as `inversion_figures/group_comparison_{location}_N{count}.png`. It compares the per-sample results within that location:
 
 | Panel | What it shows |
 |---|---|
-| **Top left** | Chondrite-normalised REE patterns: samples (black), the best-fit model (red) with its uncertainty envelope (shading), and the global best fit (orange). The inverted temperature, thickness and enrichment are printed in the corner. |
+| **(a)** | Excess temperature vs lithospheric thickness, one point per sample |
+| **(b)** | Relative enrichment vs lithospheric thickness |
+| **(c)** | Excess temperature vs relative enrichment |
+| **(d-1) to (d-3)** | Histograms of temperature, thickness and enrichment. The dashed line is the misfit-weighted mean and the grey band is ± 1 weighted standard deviation, computed the same way as the location summary in Step 4. |
+
+In panels (a) to (c), points are coloured by misfit; darker blue is a better fit. Depleted enrichment values (negative) are divided by 100 so they fit on the same axis. Locations with fewer than 3 samples are skipped, with a message.
+
+The axes are fixed (temperature 50 to 300 K, thickness 15 to 130 km, enrichment −1.2 to 16) so that figures for different locations can be compared directly. Samples outside these ranges are not shown.
+
+To turn these figures off, use `--no_group_comparison_figure` (Python: `group_comparison_figure=False`).
+
+#### Individual figures (`--individual_sample_figures`)
+
+With `--individual_sample_figures`, one figure per sample is saved as `inversion_figures/ree_comparison_{location}__sample{n}_log10_N1.png`. These are off by default because large datasets would produce many files.
+
+```bash
+meltinv invert examples.xlsx --correction --individual_sample_figures
+```
+
+Each individual figure has four panels:
+
+| Panel | What it shows |
+|---|---|
+| **Top left** | Chondrite-normalised REE pattern: the sample (black), the best-fit model (red) with its uncertainty envelope (shading), and the global best fit (orange). The inverted temperature, thickness and enrichment are printed in the corner. |
 | **Top right** | Misfit across excess temperature and lithospheric thickness, at the best-fit enrichment. Colours and contours show misfit divided by the minimum misfit, so 1.1 means 10% worse than the best fit. The red star marks the best fit, the orange circle the global minimum, and the dashed line `litho_thickness_ref`. |
 | **Bottom left** | Misfit across excess temperature and enrichment, at the best-fit thickness |
 | **Bottom right** | Misfit across thickness and enrichment, at the best-fit temperature |
@@ -230,64 +275,40 @@ meltinv.invert("input.xlsx", depleted_locations="all")
 
 Matching is by **substring and case-sensitive**: `Iceland` matches `Iceland (NNVZ)` and `Iceland (WVZ)`, but not `iceland`.
 
-### Inverting each sample individually
-
-Group mode fits one solution to all samples at a location. Per-sample mode inverts **each sample on its own**. This lets you see the spread within a location, and it also includes locations that have only one sample:
-
-```bash
-meltinv invert examples.xlsx --correction --per_sample
-```
-
-```python
-meltinv.invert("examples.xlsx", correction=True, per_sample=True)
-```
-
-This writes two files:
-
-| File | Contents |
-|---|---|
-| `inversion_results/{name}_sample_inversion_log10.xlsx` | One row per sample, in input order, with an extra `sample_number` column (1, 2, … within each location) |
-| `inversion_results/{name}_sample_inversion_summary_log10.xlsx` | One row per location: a misfit-weighted average of the per-sample results (see below) |
-
-How the location summary is built:
-
-1. For locations with fewer than 6 samples, all samples are kept. Otherwise, the best 50% by misfit are kept, and never fewer than 3.
-2. Every column is averaged with weights of `1 / misfit_value`.
-3. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
-
-#### Group comparison figures
-
-In per-sample mode, meltinv also makes one **group comparison figure** per location by default. It is saved as `inversion_figures/group_comparison_{location}_N{count}.png` and compares the per-sample results within that location:
-
-| Panel | What it shows |
-|---|---|
-| **(a)** | Excess temperature vs lithospheric thickness, one point per sample |
-| **(b)** | Relative enrichment vs lithospheric thickness |
-| **(c)** | Excess temperature vs relative enrichment |
-| **(d-1) to (d-3)** | Histograms of temperature, thickness and enrichment. The dashed line is the misfit-weighted mean and the grey band is ± 1 weighted standard deviation, computed the same way as the location summary above. |
-
-In panels (a) to (c), points are coloured by misfit; darker blue is a better fit. Depleted enrichment values (negative) are divided by 100 so they fit on the same axis. Locations with fewer than 3 samples are skipped, with a message. The axes are fixed (temperature 50 to 300 K, thickness 15 to 130 km, enrichment −1.2 to 16) so that figures for different locations can be compared directly; samples outside these ranges are not shown.
-
-To turn this figure off, use `--no_group_comparison_figure` (Python: `group_comparison_figure=False`).
-
-With `--individual_sample_figures`, per-sample mode also makes one individual figure per sample, named `ree_comparison_{location}__sample{n}_log10_N1.png`. For large datasets this can be many files.
-
 ### Using the results in Python
 
-`meltinv.invert` returns the results table as a pandas DataFrame, so you can analyse it directly:
+`meltinv.invert` returns the per-sample results as a pandas DataFrame, so you can analyse them directly:
 
 ```python
 import meltinv
 
 df = meltinv.invert("examples.xlsx", correction=True)
 
-print(df[["location", "T_mean_cali", "depth_mean_cali", "basalt_percentage"]])
+print(df[["location", "sample_number", "T_mean_cali", "depth_mean_cali", "basalt_percentage"]])
 
-# Compare inverted thickness with an independent estimate
-df["thickness_diff"] = df["depth_mean_cali"] - df["litho_thickness_ref"]
+# Spread of inverted temperatures at each location
+print(df.groupby("location")["T_mean_cali"].describe())
 ```
 
-In per-sample mode, the returned DataFrame holds the per-sample results. The location summary is only written to file.
+The location summary is written to file only. Read it back with pandas if you need it:
+
+```python
+import pandas as pd
+
+summary = pd.read_excel("inversion_results/examples_sample_inversion_summary_log10.xlsx")
+```
+
+### Group inversion: the group_samples branch
+
+This version (`main`) always inverts each sample individually. The **`group_samples`** branch keeps the older group inversion, which fits one solution to all samples at a location together (at least 2 samples per location). To use it, install that branch instead:
+
+```bash
+git clone -b group_samples https://github.com/shihao-jiang/meltinv.git meltinv-group
+cd meltinv-group
+pip install .
+```
+
+On that branch, group inversion is the default and `--per_sample` switches to the per-sample inversion described here. See the README on that branch for details.
 
 ---
 
@@ -310,7 +331,7 @@ Returns the corrected DataFrame and writes `inversion_results/{name}_corrected.x
 ```python
 meltinv.invert(file_name, depleted_locations=None, correction=False, src_Fo=0.9,
                max_olivine_addition=0.5, individual_sample_figures=False,
-               group_comparison_figure=True, per_sample=False)
+               group_comparison_figure=True)
 ```
 
 | Argument | Default | Description |
@@ -320,11 +341,12 @@ meltinv.invert(file_name, depleted_locations=None, correction=False, src_Fo=0.9,
 | `correction` | `False` | Run the fractionation correction first |
 | `src_Fo` | `0.9` | Used only when `correction=True` |
 | `max_olivine_addition` | `0.5` | Used only when `correction=True` |
-| `individual_sample_figures` | `False` | Save a 4-panel REE and misfit figure for each group (group mode) or each sample (per-sample mode). The old name `make_figures` still works. |
-| `group_comparison_figure` | `True` | In per-sample mode, save a group comparison figure for each location with ≥ 3 samples. Ignored in group mode. |
-| `per_sample` | `False` | Invert each sample individually instead of each location |
+| `individual_sample_figures` | `False` | Save a 4-panel REE and misfit figure for each sample. The old name `make_figures` still works. |
+| `group_comparison_figure` | `True` | Save a group comparison figure for each location with ≥ 3 samples |
 
-Returns the results as a pandas DataFrame.
+Returns the per-sample results as a pandas DataFrame.
+
+For compatibility with older scripts, `per_sample=True` is accepted and has no effect. `per_sample=False` raises an error pointing to the [`group_samples` branch](#group-inversion-the-group_samples-branch).
 
 ### Command line
 
@@ -334,10 +356,9 @@ meltinv correction FILE [--src_Fo 0.9] [--max_olivine_addition 0.5]
 meltinv invert FILE [--depleted LOC [LOC ...] | --depleted all]
                     [--correction] [--src_Fo 0.9] [--max_olivine_addition 0.5]
                     [--individual_sample_figures] [--no_group_comparison_figure]
-                    [--per_sample]
 ```
 
-The command-line flags map onto the Python arguments above. `--no_group_comparison_figure` is the same as `group_comparison_figure=False`, and the old `--make_figures` flag still works as `--individual_sample_figures`.
+The command-line flags map onto the Python arguments above. `--no_group_comparison_figure` is the same as `group_comparison_figure=False`. The old `--make_figures` flag still works as `--individual_sample_figures`, and the old `--per_sample` flag is accepted and ignored.
 
 ### Output files
 
@@ -346,11 +367,10 @@ All paths are relative to the current working directory. `{name}` is the input f
 | File | Produced by |
 |---|---|
 | `inversion_results/{name}_corrected.xlsx` | `correction`, or `invert --correction` |
-| `inversion_results/{name}_group_inversion_summary_log10.xlsx` | `invert` (group mode) |
-| `inversion_results/{name}_sample_inversion_log10.xlsx` | `invert --per_sample` |
-| `inversion_results/{name}_sample_inversion_summary_log10.xlsx` | `invert --per_sample` |
-| `inversion_figures/ree_comparison_{location}_log10_N{count}.png` | `invert --individual_sample_figures` |
-| `inversion_figures/group_comparison_{location}_N{count}.png` | `invert --per_sample` (unless `--no_group_comparison_figure`) |
+| `inversion_results/{name}_sample_inversion_log10.xlsx` | `invert` (one row per sample) |
+| `inversion_results/{name}_sample_inversion_summary_log10.xlsx` | `invert` (one row per location) |
+| `inversion_figures/group_comparison_{location}_N{count}.png` | `invert` (unless `--no_group_comparison_figure`) |
+| `inversion_figures/ree_comparison_{location}__sample{n}_log10_N1.png` | `invert --individual_sample_figures` |
 
 Existing files with the same name are overwritten.
 
@@ -362,9 +382,10 @@ Existing files with the same name are overwritten.
 2. **Source enrichment.** For each trial enrichment value, the model REE concentrations are rescaled for a source made by mixing:
    - primitive mantle (McDonough & Sun, 1995) with 0 to 15% basalt (Sun & McDonough, 1989), in steps of 0.1%; or
    - with `--depleted`, primitive mantle with 5 to 100% depleted mantle (Salters & Stracke, 2004).
-3. **Misfit.** For each element, meltinv computes the log10 misfit between every sample and the model, takes the root-sum-square, and divides by the number of samples. It then averages over all usable elements.
-4. **Best fit.** The temperature, thickness and enrichment combination with the lowest misfit is reported.
+3. **Misfit.** For each sample, meltinv computes the log10 misfit between the sample and the model for each element, then averages over all elements the sample has values for.
+4. **Best fit.** For each sample, the temperature, thickness and enrichment combination with the lowest misfit is reported.
 5. **Calibration.** The grid assumes a peridotite source. The best-fit temperature and thickness are then corrected for the effect of a pyroxenite (G2) component on the solidus. This uses flux-weighted mixing (Phipps Morgan, 2001; Sobolev et al., 2007), with the pyroxenite fraction taken from the inverted enrichment. The results are the `_cali` columns.
+6. **Location summary.** The per-sample results are combined for each location with a misfit-weighted average, as described in [Step 4](#step-4-reading-the-results).
 
 ---
 
@@ -374,8 +395,11 @@ Existing files with the same name are overwritten.
 |---|---|
 | `The following required columns are missing: ...` | Column names are case-sensitive. Check `location` and the 14 REE names. |
 | `Unsupported file format` | Only `.xlsx`, `.xls` and `.csv` are accepted. |
-| A location is missing from the results | It has only 1 sample (group mode needs ≥ 2), or no element has values in enough samples. Use `--per_sample` to include single samples. |
+| A sample is missing from the results | It has no usable REE values. |
+| No group comparison figure for a location | It has fewer than 3 samples. Its results are still in both results files. |
+| A sample is missing from a group comparison figure | Its result lies outside the fixed axis ranges. Check the per-sample results file. |
 | `KeyError` on `SiO2` (or another oxide) during correction | The correction needs all 10 major-oxide columns listed in [Step 1](#step-1-prepare-the-input-file). |
+| `per_sample=False` raises an error | Group inversion is only on the [`group_samples` branch](#group-inversion-the-group_samples-branch). |
 | Results appear in an unexpected folder | Outputs go to the **current working directory**. `cd` to where you want them before running. |
 
 ---
