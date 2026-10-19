@@ -599,18 +599,9 @@ def calibration(T, P, h, b):
 
 def aggregate_per_sample_results(results_df):
     """
-    Island-level summary from per-sample results. For each location, the
-    same lowest-misfit subset used for the hull/mean-line in
-    plot_multiple_slices.py is selected first (all samples if N<6, else the
-    best 50% by misfit rank -- same small_n_threshold=6, min_points=3 as
-    misfit_hull/misfit_weighted_stats there), then every column is the
-    1/misfit_value-weighted mean over that subset, so results here match
-    the dashed mean lines plotted there. T_mean_cali, depth_mean_cali and
-    basalt_percentage additionally get _err_minus/_err_plus columns (mean
-    -/+ the same weighted std used for the shaded error band there);
-    basalt_percentage's error is computed in the same compressed-enrichment
-    units (compress_enrichment) plot_multiple_slices.py uses for its d-3
-    panel, not the raw basalt_percentage column's units.
+    Summarise per-sample results for each location as a 1/misfit-weighted mean
+    over the best-fitting samples (all if N < 6, otherwise the best 50%).
+    Temperature, thickness and enrichment also get mean -/+ 1 std columns.
     """
     agg_columns = ['T_mean', 'T_mean_cali', 'depth_mean', 'depth_mean_cali',
                    'pres_mean_cali', 'pres_min_cali', 'pres_max_cali',
@@ -654,10 +645,8 @@ def aggregate_per_sample_results(results_df):
 
 def plot_group_comparison(results_df, min_count=3):
     """
-    For each location, compare the per-sample inversion results: pairwise
-    scatter plots of temperature, thickness and enrichment coloured by misfit,
-    plus histograms with the misfit-weighted mean (dashed) and +/- 1 std band.
-    Locations with fewer than min_count samples are skipped.
+    Plot one figure per location comparing its per-sample temperature,
+    thickness and enrichment results. Locations with fewer than min_count samples are skipped.
     """
     results_dir = Path("inversion_figures")
     results_dir.mkdir(exist_ok=True)

@@ -16,6 +16,40 @@ The package can be used from the **command line** or from **Python**. This READM
 
 ---
 
+## Arguments at a glance
+
+```python
+import meltinv
+
+meltinv.invert(
+    file_name,                        # .xlsx or .csv input file
+    depleted_locations=None,          # locations whose source may be depleted
+    correction=False,                 # run the fractionation correction first
+    src_Fo=0.9,                       # forsterite content of source olivine
+    max_olivine_addition=0.5,         # maximum olivine added during correction
+    individual_sample_figures=False,  # 4-panel REE/misfit figure for each sample
+    group_comparison_figure=True,     # comparison figure for each location
+)
+
+meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5)
+```
+
+| Argument | Command-line flag | Default | What it does |
+|---|---|---|---|
+| `file_name` | `FILE` | — | Input `.xlsx` or `.csv` file (see [Step 1](#step-1-prepare-the-input-file)). |
+| `depleted_locations` | `--depleted LOC [LOC ...]` or `--depleted all` | `None` | By default, the source enrichment is searched from 0 to 15% basalt mixed into primitive mantle. For the locations given here, mixtures of primitive mantle with 5 to 100% depleted mantle are also searched; these appear as negative `basalt_percentage` values. Give location names or parts of names: matching is by substring and case-sensitive, so `Iceland` matches `Iceland (NNVZ)` but not `iceland`. Use `"all"` for every location. |
+| `correction` | `--correction` | `False` | Correct evolved samples back to primary magma before inverting (see [Step 2](#step-2-optional-fractionation-correction)). |
+| `src_Fo` | `--src_Fo` | `0.9` | Forsterite content of the mantle-source olivine. Used only by the correction. |
+| `max_olivine_addition` | `--max_olivine_addition` | `0.5` | Maximum mass fraction of olivine that may be added. Used only by the correction. |
+| `individual_sample_figures` | `--individual_sample_figures` | `False` | Save a 4-panel REE and misfit figure for each sample (see [Step 5](#step-5-reading-the-figures)). |
+| `group_comparison_figure` | `--no_group_comparison_figure` turns it off | `True` | Save a figure comparing the samples at each location with ≥ 3 samples (see [Step 5](#step-5-reading-the-figures)). |
+
+`meltinv.invert` returns the per-sample results as a pandas DataFrame, and `meltinv.correction` returns the corrected data. On the command line, the two functions are `meltinv invert FILE [flags]` and `meltinv correction FILE [flags]`.
+
+Older argument names still work: `make_figures` (`--make_figures`) means `individual_sample_figures`, and `per_sample=True` (`--per_sample`) is accepted and ignored. `per_sample=False` raises an error, because group inversion is only on the [`group_samples` branch](#group-inversion-the-group_samples-branch).
+
+---
+
 ## Contents
 
 1. [Installation](#1-installation)
@@ -26,7 +60,6 @@ The package can be used from the **command line** or from **Python**. This READM
    - [Step 4: Reading the results](#step-4-reading-the-results)
    - [Step 5: Reading the figures](#step-5-reading-the-figures)
 3. [Going further](#3-going-further)
-   - [Depleted mantle sources](#depleted-mantle-sources)
    - [Using the results in Python](#using-the-results-in-python)
    - [Group inversion: the group_samples branch](#group-inversion-the-group_samples-branch)
 4. [Reference](#4-reference)
@@ -258,25 +291,6 @@ The contours give a feel for how tightly each parameter is constrained. A long, 
 
 ## 3. Going further
 
-### Depleted mantle sources
-
-By default, enrichment is searched from 0 to 15% basalt added to primitive mantle. Some locations, such as Iceland or the Galápagos, may instead sample a source **more depleted** than primitive mantle. Use `--depleted` to also search mixtures of primitive mantle with depleted mantle (−100 to −5%) for those locations:
-
-```bash
-# Locations whose name contains "Iceland" or "Galapagos"
-meltinv invert input.xlsx --depleted Iceland Galapagos
-
-# Every location
-meltinv invert input.xlsx --depleted all
-```
-
-```python
-meltinv.invert("input.xlsx", depleted_locations=["Iceland", "Galapagos"])
-meltinv.invert("input.xlsx", depleted_locations="all")
-```
-
-Matching is by **substring and case-sensitive**: `Iceland` matches `Iceland (NNVZ)` and `Iceland (WVZ)`, but not `iceland`.
-
 ### Using the results in Python
 
 `meltinv.invert` returns the per-sample results as a pandas DataFrame, so you can analyse them directly:
@@ -316,39 +330,7 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 
 ## 4. Reference
 
-### Python API
-
-```python
-meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5)
-```
-
-| Argument | Default | Description |
-|---|---|---|
-| `file_name` | — | Path to `.xlsx` or `.csv` input |
-| `src_Fo` | `0.9` | Forsterite content of mantle-source olivine |
-| `max_olivine_addition` | `0.5` | Maximum mass fraction of olivine that may be added |
-
-Returns the corrected DataFrame and writes `inversion_results/{name}_corrected.xlsx`.
-
-```python
-meltinv.invert(file_name, depleted_locations=None, correction=False, src_Fo=0.9,
-               max_olivine_addition=0.5, individual_sample_figures=False,
-               group_comparison_figure=True)
-```
-
-| Argument | Default | Description |
-|---|---|---|
-| `file_name` | — | Path to `.xlsx` or `.csv` input |
-| `depleted_locations` | `None` | List of location substrings, or `"all"`, for which depleted sources are also searched |
-| `correction` | `False` | Run the fractionation correction first |
-| `src_Fo` | `0.9` | Used only when `correction=True` |
-| `max_olivine_addition` | `0.5` | Used only when `correction=True` |
-| `individual_sample_figures` | `False` | Save a 4-panel REE and misfit figure for each sample. The old name `make_figures` still works. |
-| `group_comparison_figure` | `True` | Save a group comparison figure for each location with ≥ 3 samples |
-
-Returns the per-sample results as a pandas DataFrame.
-
-For compatibility with older scripts, `per_sample=True` is accepted and has no effect. `per_sample=False` raises an error pointing to the [`group_samples` branch](#group-inversion-the-group_samples-branch).
+All arguments are described in [Arguments at a glance](#arguments-at-a-glance).
 
 ### Command line
 
@@ -360,7 +342,11 @@ meltinv invert FILE [--depleted LOC [LOC ...] | --depleted all]
                     [--individual_sample_figures] [--no_group_comparison_figure]
 ```
 
-The command-line flags map onto the Python arguments above. `--no_group_comparison_figure` is the same as `group_comparison_figure=False`. The old `--make_figures` flag still works as `--individual_sample_figures`, and the old `--per_sample` flag is accepted and ignored.
+For example, to treat the Iceland and Galápagos locations as possibly depleted, correct the samples first and save the individual figures:
+
+```bash
+meltinv invert input.xlsx --depleted Iceland Galapagos --correction --individual_sample_figures
+```
 
 ### Output files
 
