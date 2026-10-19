@@ -54,7 +54,7 @@ Check that the command-line tool is available:
 
 ```bash
 meltinv --help
-``
+```
 
 ---
 
@@ -146,12 +146,15 @@ meltinv invert inversion_results/examples_corrected.xlsx --make_figures
 results = meltinv.invert("inversion_results/examples_corrected.xlsx", make_figures=True)
 ```
 
-While it runs, meltinv prints each location and its sample count, followed by every enrichment value that improves the fit. The example takes under a minute.
+While it runs, meltinv prints each location (in alphabetical order) and its sample count, followed by every enrichment value that improves the fit. With `--correction`, meltPT first prints a long log of the olivine addition. The example takes under a minute.
 
 ```text
-Austral-Cook Islands (Mangaia) Sample number: 14
+Austral-Cook Islands (Atiu) Sample number: 3
 Scale: 0.0 Global min misfit: ...
 Scale: 0.1 Global min misfit: ...
+...
+Figure saved to: .../inversion_figures/ree_comparison_Austral-Cook Islands (Atiu)_log10_N3.png
+Austral-Cook Islands (Mangaia) Sample number: 14
 ...
 Results saved to: .../inversion_results/examples_group_inversion_summary_log10.xlsx
 ```
@@ -248,7 +251,7 @@ How the location summary is built:
 2. Every column is averaged with weights of `1 / misfit_value`.
 3. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
 
-With `--make_figures`, per-sample mode makes one figure per sample, named `{location}__sample{n}`.
+With `--make_figures`, per-sample mode makes one figure per sample, named `ree_comparison_{location}__sample{n}_log10_N1.png`.
 
 ### Using the results in Python
 
