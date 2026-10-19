@@ -83,7 +83,7 @@ For the REE columns:
 
 - Missing values are fine. Blank cells, `0`, negative values and text (such as `bdl`) are all treated as missing.
 - Each sample is fitted using whichever of the 14 REE it has values for.
-- At least 6 values are required for one sample to be inverted.
+- At least 6 usable REE values are required for one sample to be inverted. Samples with fewer are skipped, with a message naming the location and sample number.
 
 **Required only if you run the fractionation correction (Step 2):**
 
@@ -397,7 +397,7 @@ Existing files with the same name are overwritten.
 |---|---|
 | `The following required columns are missing: ...` | Column names are case-sensitive. Check `location` and the 14 REE names. |
 | `Unsupported file format` | Only `.xlsx`, `.xls` and `.csv` are accepted. |
-| A sample is missing from the results | It has no usable REE values. |
+| A sample is missing from the results | It has fewer than 6 usable REE values. Look for a `Skipping ... sample n` message in the output. |
 | No group comparison figure for a location | It has fewer than 3 samples. Its results are still in both results files. |
 | A sample is missing from a group comparison figure | Its result lies outside the fixed axis ranges. Check the per-sample results file. |
 | `KeyError` on `SiO2` (or another oxide) during correction | The correction needs all 10 major-oxide columns listed in [Step 1](#step-1-prepare-the-input-file). |

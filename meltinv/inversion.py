@@ -758,6 +758,16 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
     df["location"] = original_location.astype(str) + "__sample" + sample_number.astype(str)
     location_map = dict(zip(df["location"], zip(original_location, sample_number, original_position)))
 
+    # Skip samples with fewer than min_ree usable REE values
+    min_ree = 6
+    ree_count = df[ree_variables].notna().sum(axis=1)
+    for label, n_ree in zip(df.loc[ree_count < min_ree, "location"], ree_count[ree_count < min_ree]):
+        location, number, _ = location_map[label]
+        print(f"Skipping {location} sample {number}: {n_ree} usable REE value(s), at least {min_ree} needed.")
+    df = df[ree_count >= min_ree]
+    if df.empty:
+        raise ValueError(f"No sample has at least {min_ree} usable REE values, so nothing can be inverted.")
+
     group_list = build_group_list(df, min_count=1)
     grids = load_all_grids()
     results = []
