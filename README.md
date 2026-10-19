@@ -54,7 +54,7 @@ Check that the command-line tool is available:
 
 ```bash
 meltinv --help
-```
+``
 
 ---
 
@@ -62,7 +62,6 @@ meltinv --help
 
 The repository ships with **`examples.xlsx`**, which contains 38 basalts from five Austral–Cook islands (Mangaia, Raivavae, Rapa, Atiu and Marotiri). We will use it throughout this tutorial.
 
-> **Where do the outputs go?**
 > All outputs are written to `inversion_results/` and `inversion_figures/` inside your **current working directory**, not next to the input file. Run meltinv from the folder where you want the results to appear.
 
 ### Step 1: Prepare the input file
