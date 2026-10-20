@@ -244,19 +244,18 @@ The inversion writes two results files.
 
 This file has one row per location, made by combining the per-sample results:
 
-1. For locations with fewer than 6 samples, all samples are kept. Otherwise, the best 50% by misfit are kept, and never fewer than 3.
-2. Every column is averaged with weights of `1 / misfit_value`.
-3. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
+1. Every column is averaged over all inverted samples at that location, with weights of `1 / misfit_value`, so better-fitting samples count for more.
+2. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
 
 For the example, the main columns look like this:
 
 | location | count | T_mean_cali (K) | T range (K) | depth_mean_cali (km) | depth range (km) | basalt_percentage | litho_thickness_ref (km) |
 |---|---|---|---|---|---|---|---|
-| Austral-Cook Islands (Atiu) | 3 | 72.5 | 67.6–77.4 | 57.4 | 54.2–60.5 | 3.6 | 86.7 |
-| Austral-Cook Islands (Mangaia) | 14 | 102.2 | 85.1–119.2 | 56.8 | 53.3–60.3 | 2.1 | 83.5 |
-| Austral-Cook Islands (Marotiri) | 1 | 107.5 | — | 60.8 | — | 2.7 | 68.3 |
-| Austral-Cook Islands (Raivavae) | 14 | 97.6 | 59.9–135.3 | 64.5 | 49.4–79.6 | 4.4 | 73.8 |
-| Austral-Cook Islands (Rapa) | 6 | 171.7 | 131.9–211.5 | 91.2 | 77.2–105.2 | 4.3 | 67.9 |
+| Austral-Cook Islands (Atiu) | 3 | 72.5 | 69.2–75.7 | 58.9 | 55.1–62.7 | 4.0 | 86.7 |
+| Austral-Cook Islands (Mangaia) | 14 | 101.4 | 73.5–129.3 | 57.9 | 53.3–62.5 | 2.7 | 83.4 |
+| Austral-Cook Islands (Marotiri) | 1 | 114.8 | — | 62.2 | — | 2.3 | 68.3 |
+| Austral-Cook Islands (Raivavae) | 14 | 114.0 | 62.0–165.9 | 62.6 | 49.9–75.4 | 2.9 | 73.8 |
+| Austral-Cook Islands (Rapa) | 6 | 170.6 | 145.6–195.6 | 91.6 | 82.1–101.1 | 4.7 | 67.9 |
 
 The ranges are the `_err_minus` to `_err_plus` columns.
 

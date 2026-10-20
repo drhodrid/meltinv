@@ -13,18 +13,14 @@ def compress_enrichment(e):
     return np.where(e < 0, e / 100, e)
 
 
-def misfit_weighted_stats(values, misfit, small_n_threshold=6, min_points=3):
+def misfit_weighted_stats(values, misfit):
     """
-    Misfit-weighted mean and std over the lowest-misfit subset (all samples
-    if N < small_n_threshold, else the best 50%), weighted by 1/misfit.
+    Mean and std over all samples, weighted by 1/misfit.
     """
     values, misfit = np.asarray(values, dtype=float), np.asarray(misfit, dtype=float)
-    pct = 100 if len(misfit) < small_n_threshold else 50
-    n_keep = min(len(misfit), max(min_points, int(np.ceil(len(misfit) * pct / 100))))
-    keep_idx = np.argsort(misfit)[:n_keep]
-    v, w = values[keep_idx], 1.0 / (misfit[keep_idx] + 1e-6)
-    mean = np.average(v, weights=w)
-    std = np.sqrt(np.average((v - mean) ** 2, weights=w))
+    w = 1.0 / (misfit + 1e-6)
+    mean = np.average(values, weights=w)
+    std = np.sqrt(np.average((values - mean) ** 2, weights=w))
     return mean, std
 
 def source_composition_mix(basalt_perc):
@@ -579,8 +575,7 @@ def calibration(T, P, h, b):
 def aggregate_per_sample_results(results_df):
     """
     Summarise per-sample results for each location as a 1/misfit-weighted mean
-    over the best-fitting samples (all if N < 6, otherwise the best 50%).
-    Temperature, thickness and enrichment also get mean -/+ 1 std columns.
+    over all samples. Temperature, thickness and enrichment also get mean -/+ 1 std columns.
     """
     agg_columns = ['T_mean', 'T_mean_cali', 'depth_mean', 'depth_mean_cali',
                    'pres_mean_cali', 'pres_min_cali', 'pres_max_cali',
@@ -588,21 +583,15 @@ def aggregate_per_sample_results(results_df):
                    'misfit_value', 'global_min_value', 'ratio_of_local_global_misfit',
                    'litho_thickness_ref']
     err_columns = ['T_mean_cali', 'depth_mean_cali', 'basalt_percentage']
-    small_n_threshold, min_points = 6, 3
 
     rows = []
     for location, group in results_df.groupby('location'):
-        misfit = group['misfit_value'].to_numpy()
-        n = len(misfit)
-        pct = 100 if n < small_n_threshold else 50
-        n_keep = min(n, max(min_points, int(np.ceil(n * pct / 100))))
-        keep_idx = np.argsort(misfit)[:n_keep]
-        kept = group.iloc[keep_idx]
-        weights = 1.0 / (kept['misfit_value'].to_numpy() + 1e-6)
+        n = len(group)
+        weights = 1.0 / (group['misfit_value'].to_numpy() + 1e-6)
 
         row = {'location': location}
         for col in agg_columns:
-            values = pd.to_numeric(kept[col], errors='coerce').to_numpy()
+            values = pd.to_numeric(group[col], errors='coerce').to_numpy()
             valid = ~np.isnan(values)
             if not valid.any():
                 row[col] = np.nan
@@ -617,7 +606,6 @@ def aggregate_per_sample_results(results_df):
                 row[f'{col}_err_minus'] = err_mean - std
                 row[f'{col}_err_plus'] = err_mean + std
         row['count'] = n
-        row['count_used'] = n_keep
         rows.append(row)
 
     return pd.DataFrame(rows)
