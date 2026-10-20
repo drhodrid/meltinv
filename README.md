@@ -1,4 +1,6 @@
-﻿# meltinv
+# meltinv
+
+> Local review changes: see [validation and changes](review/CHANGES.md).
 
 **meltinv** is a Python package that uses the Rare Earth Element (REE) compositions of primary magmas to jointly invert for:
 
@@ -77,6 +79,7 @@ meltinv.invert(
     max_olivine_addition=0.5,         # maximum olivine added during correction
     individual_sample_figures=False,  # 4-panel REE/misfit figure for each sample
     group_comparison_figure=True,     # comparison figure for each location
+    misfit_metric="mae",              # mae, paper_l2, or rms
 )
 
 meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5)
@@ -132,7 +135,7 @@ Existing files with the same name are overwritten.
 
 ## 3. Tutorial: your first inversion
 
-The repository ships with **`examples.xlsx`**, which contains 38 basalts from five Austral–Cook islands (Mangaia, Raivavae, Rapa, Atiu and Marotiri). We will use it throughout this tutorial.
+The tutorial below refers to **`examples.xlsx`** (38 basalts from five Austral–Cook islands), but this file is **absent from the audited repository commit**. Obtain it from the author or supply your own input. The regression tests generate synthetic inputs from the bundled model grids.
 
 > All outputs are written to `inversion_results/` and `inversion_figures/` inside your **current working directory**, not next to the input file. Run meltinv from the folder where you want the results to appear.
 
@@ -246,7 +249,7 @@ This file has one row per location, made by combining the per-sample results:
 
 1. For locations with fewer than 6 samples, all samples are kept. Otherwise, the best 50% by misfit are kept, and never fewer than 3.
 2. Every column is averaged with weights of `1 / misfit_value`.
-3. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
+3. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these bounds use the same percentage-point units as the mean. Only plots compress negative values by dividing by 100. The summary also reports `count_used`, the number retained after trimming.
 
 For the example, the main columns look like this:
 
@@ -400,3 +403,26 @@ Jiang et al. (2026), xxx, *Journal Name*.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## Explicit objective selection (review branch)
+
+`invert(..., misfit_metric="mae")` and CLI `--misfit_metric mae` preserve the
+original individual-sample mean absolute log10 residual. Use `paper_l2` for
+Equation (5) exactly as printed: `sqrt(sum(residual**2)) / N`. Use `rms` for
+`sqrt(mean(residual**2))`. The latter two select the same optimum for a fixed
+sample but assign different relative group weights when REE counts differ.
+Both output spreadsheets record the chosen metric. Do not combine outputs
+from different metrics. Choosing a metric is a scientific decision; this
+branch does not silently change the default.
+
+Failed fractionation backtracking produces missing corrected REEs and
+`correction_success=False`, rather than treating failure as zero addition.
+Such samples are skipped by the inversion's minimum-six-REE rule.
+The meltPT import is deferred until fractionation correction is requested.
+
+Exact fits now participate in minimisation. For an exact fit, the diagnostic
+best/global ratio is reported as 1 by convention; plots show absolute misfit
+because division by a zero minimum is undefined. Thickness plot coordinates
+now match exported results (16 + 2*row km); the underlying grid-coordinate
+provenance still needs clarification against the manuscript.

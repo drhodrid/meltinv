@@ -1,0 +1,525 @@
+{
+  "baseline_commit": "48fc8e473acb13cfec6722468a3cecc5750b2b1c",
+  "grid_shape": [
+    53,
+    58
+  ],
+  "valid_cells": 2032,
+  "exact_input_cell": [
+    14,
+    25
+  ],
+  "baseline_selected_cell": [
+    14,
+    26
+  ],
+  "baseline_selected_misfit": 0.005005678575742185,
+  "baseline_misfit_at_exact_cell": 0.0,
+  "envelope_violations": [
+    {
+      "element": "Sm",
+      "count": 2,
+      "max_relative_violation": 0.007451592806326487,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        5.501881126051755,
+        5.461186587363351,
+        5.806550309553261
+      ]
+    },
+    {
+      "element": "Eu",
+      "count": 3,
+      "max_relative_violation": 0.011732201626339492,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        1.5857399869181887,
+        1.5673515030648852,
+        1.6586248041429659
+      ]
+    },
+    {
+      "element": "Gd",
+      "count": 5,
+      "max_relative_violation": 0.015051375789060847,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        4.218158960495355,
+        4.15561129328683,
+        4.381280228143109
+      ]
+    },
+    {
+      "element": "Tb",
+      "count": 11,
+      "max_relative_violation": 0.017884734632622384,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        0.5748767571711763,
+        0.564775890247202,
+        0.5937911309446616
+      ]
+    },
+    {
+      "element": "Dy",
+      "count": 9,
+      "max_relative_violation": 0.016820088713095222,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        2.918220023645042,
+        2.8699472561939556,
+        3.0150568613313222
+      ]
+    },
+    {
+      "element": "Ho",
+      "count": 6,
+      "max_relative_violation": 0.01831886650992283,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        0.49523649189735675,
+        0.486327522924796,
+        0.5106373061736909
+      ]
+    },
+    {
+      "element": "Er",
+      "count": 7,
+      "max_relative_violation": 0.01858038362051123,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        1.1491532172523258,
+        1.1281909957540097,
+        1.1843027186849584
+      ]
+    },
+    {
+      "element": "Tm",
+      "count": 6,
+      "max_relative_violation": 0.01793686791784392,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        0.14496104382793984,
+        0.14240671341873376,
+        0.1494485660475367
+      ]
+    },
+    {
+      "element": "Yb",
+      "count": 6,
+      "max_relative_violation": 0.017467691438151373,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        0.7862829978547324,
+        0.7727842411815079,
+        0.8110258903552465
+      ]
+    },
+    {
+      "element": "Lu",
+      "count": 5,
+      "max_relative_violation": 0.017145366544409648,
+      "worst_cell": [
+        42,
+        18
+      ],
+      "min_mean_max": [
+        0.10346342652674295,
+        0.10171940995832637,
+        0.10676711360498056
+      ]
+    }
+  ],
+  "synthetic_noise_dex": 0.03,
+  "synthetic_seed": 20261019,
+  "synthetic_changed_optima": 18,
+  "synthetic_comparisons": [
+    {
+      "mae_index": [
+        0,
+        48,
+        49
+      ],
+      "rms_index": [
+        0,
+        48,
+        49
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        0,
+        19,
+        22
+      ],
+      "rms_index": [
+        0,
+        19,
+        22
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        0,
+        4,
+        41
+      ],
+      "rms_index": [
+        0,
+        7,
+        42
+      ],
+      "temperature_difference_K": 5,
+      "thickness_difference_km": 6,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        2,
+        18,
+        22
+      ],
+      "rms_index": [
+        4,
+        18,
+        23
+      ],
+      "temperature_difference_K": 5,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": 0.2
+    },
+    {
+      "mae_index": [
+        0,
+        26,
+        52
+      ],
+      "rms_index": [
+        0,
+        26,
+        54
+      ],
+      "temperature_difference_K": 10,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        3,
+        12,
+        22
+      ],
+      "rms_index": [
+        0,
+        11,
+        21
+      ],
+      "temperature_difference_K": -5,
+      "thickness_difference_km": -2,
+      "enrichment_difference_percentage_points": -0.30000000000000004
+    },
+    {
+      "mae_index": [
+        5,
+        36,
+        31
+      ],
+      "rms_index": [
+        7,
+        35,
+        29
+      ],
+      "temperature_difference_K": -10,
+      "thickness_difference_km": -2,
+      "enrichment_difference_percentage_points": 0.20000000000000007
+    },
+    {
+      "mae_index": [
+        0,
+        22,
+        28
+      ],
+      "rms_index": [
+        0,
+        24,
+        30
+      ],
+      "temperature_difference_K": 10,
+      "thickness_difference_km": 4,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        0,
+        13,
+        49
+      ],
+      "rms_index": [
+        0,
+        12,
+        50
+      ],
+      "temperature_difference_K": 5,
+      "thickness_difference_km": -2,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        10,
+        30,
+        47
+      ],
+      "rms_index": [
+        9,
+        33,
+        47
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 6,
+      "enrichment_difference_percentage_points": -0.09999999999999998
+    },
+    {
+      "mae_index": [
+        0,
+        30,
+        39
+      ],
+      "rms_index": [
+        0,
+        28,
+        36
+      ],
+      "temperature_difference_K": -15,
+      "thickness_difference_km": -4,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        2,
+        16,
+        9
+      ],
+      "rms_index": [
+        1,
+        16,
+        9
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": -0.1
+    },
+    {
+      "mae_index": [
+        20,
+        12,
+        19
+      ],
+      "rms_index": [
+        14,
+        10,
+        17
+      ],
+      "temperature_difference_K": -10,
+      "thickness_difference_km": -4,
+      "enrichment_difference_percentage_points": -0.5999999999999999
+    },
+    {
+      "mae_index": [
+        0,
+        45,
+        20
+      ],
+      "rms_index": [
+        0,
+        45,
+        20
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        11,
+        39,
+        15
+      ],
+      "rms_index": [
+        12,
+        39,
+        15
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": 0.10000000000000009
+    },
+    {
+      "mae_index": [
+        0,
+        10,
+        9
+      ],
+      "rms_index": [
+        0,
+        10,
+        9
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        18,
+        36,
+        45
+      ],
+      "rms_index": [
+        7,
+        42,
+        52
+      ],
+      "temperature_difference_K": 35,
+      "thickness_difference_km": 12,
+      "enrichment_difference_percentage_points": -1.1
+    },
+    {
+      "mae_index": [
+        0,
+        14,
+        31
+      ],
+      "rms_index": [
+        0,
+        14,
+        31
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        8,
+        20,
+        52
+      ],
+      "rms_index": [
+        3,
+        20,
+        51
+      ],
+      "temperature_difference_K": -5,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": -0.5
+    },
+    {
+      "mae_index": [
+        0,
+        34,
+        42
+      ],
+      "rms_index": [
+        0,
+        34,
+        42
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        0,
+        37,
+        53
+      ],
+      "rms_index": [
+        0,
+        36,
+        51
+      ],
+      "temperature_difference_K": -10,
+      "thickness_difference_km": -2,
+      "enrichment_difference_percentage_points": 0.0
+    },
+    {
+      "mae_index": [
+        5,
+        27,
+        54
+      ],
+      "rms_index": [
+        0,
+        27,
+        54
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": -0.5
+    },
+    {
+      "mae_index": [
+        20,
+        20,
+        18
+      ],
+      "rms_index": [
+        19,
+        20,
+        18
+      ],
+      "temperature_difference_K": 0,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": -0.09999999999999987
+    },
+    {
+      "mae_index": [
+        15,
+        38,
+        29
+      ],
+      "rms_index": [
+        12,
+        38,
+        30
+      ],
+      "temperature_difference_K": 5,
+      "thickness_difference_km": 0,
+      "enrichment_difference_percentage_points": -0.2999999999999998
+    }
+  ]
+}

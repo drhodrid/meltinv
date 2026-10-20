@@ -25,6 +25,7 @@ def main():
     parser_inv.add_argument("file_name", type=str)
     parser_inv.add_argument("--depleted", nargs="+")
     parser_inv.add_argument("--correction", action="store_true")
+    parser_inv.add_argument("--misfit_metric", choices=["mae", "paper_l2", "rms"], default="mae")
     parser_inv.add_argument("--src_Fo", type=float, default=0.9)
     parser_inv.add_argument("--max_olivine_addition", type=float, default=0.5)
     parser_inv.add_argument("--individual_sample_figures", "--make_figures", action="store_true")
@@ -53,7 +54,8 @@ def main():
             src_Fo=args.src_Fo,
             max_olivine_addition=args.max_olivine_addition,
             individual_sample_figures=args.individual_sample_figures,
-            group_comparison_figure=args.group_comparison_figure
+            group_comparison_figure=args.group_comparison_figure,
+            misfit_metric=args.misfit_metric
         )
 
 
