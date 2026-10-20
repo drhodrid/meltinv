@@ -219,7 +219,7 @@ def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
         std = np.nanstd(c_sample)
 
         misfit_grid[valid_mask] = (
-            np.sqrt(misfit_grid[valid_mask]) / sample_count
+            np.sqrt(misfit_grid[valid_mask] / sample_count)
         )
 
         misfit_grid = np.where(valid_mask, misfit_grid, np.nan)
