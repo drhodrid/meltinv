@@ -252,10 +252,10 @@ For the example, the main columns look like this:
 | location | count | T_mean_cali (K) | T range (K) | depth_mean_cali (km) | depth range (km) | basalt_percentage | litho_thickness_ref (km) |
 |---|---|---|---|---|---|---|---|
 | Austral-Cook Islands (Atiu) | 3 | 72.5 | 69.2–75.7 | 58.9 | 55.1–62.7 | 4.0 | 86.7 |
-| Austral-Cook Islands (Mangaia) | 14 | 101.4 | 73.5–129.3 | 57.9 | 53.3–62.5 | 2.7 | 83.4 |
+| Austral-Cook Islands (Mangaia) | 14 | 102.5 | 74.9–130.1 | 57.9 | 53.3–62.5 | 2.6 | 83.4 |
 | Austral-Cook Islands (Marotiri) | 1 | 114.8 | — | 62.2 | — | 2.3 | 68.3 |
-| Austral-Cook Islands (Raivavae) | 14 | 114.0 | 62.0–165.9 | 62.6 | 49.9–75.4 | 2.9 | 73.8 |
-| Austral-Cook Islands (Rapa) | 6 | 170.6 | 145.6–195.6 | 91.6 | 82.1–101.1 | 4.7 | 67.9 |
+| Austral-Cook Islands (Raivavae) | 14 | 114.3 | 61.8–166.8 | 62.8 | 49.8–75.8 | 3.0 | 73.8 |
+| Austral-Cook Islands (Rapa) | 6 | 170.9 | 146.0–195.8 | 91.6 | 82.1–101.0 | 4.7 | 67.9 |
 
 The ranges are the `_err_minus` to `_err_plus` columns.
 
@@ -368,7 +368,7 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 2. **Source enrichment.** For each trial enrichment value, the model REE concentrations are rescaled for a source made by mixing:
    - primitive mantle (McDonough & Sun, 1995) with 0 to 15% basalt (Sun & McDonough, 1989), in steps of 0.1%; or
    - with `--depleted`, primitive mantle with 5 to 100% depleted mantle (Salters & Stracke, 2004).
-3. **Misfit.** For each sample, the misfit is the root-mean-square (RMS) of the log10 residuals over the N usable REE: misfit = √( Σ (log10 c_model − log10 c_sample)² / N ). A misfit of 0.1 means the model and sample differ by a factor of about 10^0.1 ≈ 1.26 (26%) on a typical element.
+3. **Misfit.** For each sample, the misfit is the root-mean-square (RMS) of the log10 residuals over the N usable REE, corrected for the 3 fitted parameters (temperature, thickness and enrichment): misfit = √( Σ (log10 c_model − log10 c_sample)² / (N − 3) ). Dividing by N − 3 rather than N keeps misfits comparable between samples with different numbers of REE. A misfit of 0.1 means the model and sample differ by a factor of about 10^0.1 ≈ 1.26 (26%) on a typical element.
 4. **Best fit.** For each sample, the temperature, thickness and enrichment combination with the lowest misfit is reported.
 5. **Calibration.** The grid assumes a peridotite source. The best-fit temperature and thickness are then corrected for the effect of a pyroxenite (G2) component on the solidus. This uses flux-weighted mixing (Phipps Morgan, 2001; Sobolev et al., 2007), with the pyroxenite fraction taken from the inverted enrichment. The results are the `_cali` columns.
 6. **Location summary.** The per-sample results are combined for each location with a misfit-weighted average, as described in [Step 4](#step-4-reading-the-results).

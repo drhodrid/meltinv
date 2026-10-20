@@ -178,8 +178,9 @@ def save_results(file_name, inv_result_df, suffix="_group_inversion_summary_log1
 
 def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
     """
-    RMS log10 misfit grid for one enrichment value. Model cells with a missing or
-    non-positive prediction for any measured element are excluded (NaN).
+    RMS log10 misfit grid for one enrichment value, normalised by N - 3 degrees of freedom
+    (N residuals, 3 fitted parameters). Model cells with a missing or non-positive prediction
+    for any measured element are excluded (NaN).
     """
     ree_variables = grids["ree_variables"]
     simulation = grids["simulation"]
@@ -190,8 +191,8 @@ def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
 
     valid_mask = np.ones_like(simulation_scaled[0], dtype=bool)
 
-    # Root-mean-square log10 residual over all usable REE values:
-    # sqrt( sum of squared residuals / number of residuals )
+    # Root-mean-square log10 residual over all usable REE values, corrected for the
+    # 3 fitted parameters (T, h, enrichment): sqrt( sum of squared residuals / (N - 3) )
     total_sq_grid = np.zeros_like(simulation_scaled[0], dtype=float)
     num_residuals = 0
     num_ree_valid = 0
@@ -214,10 +215,11 @@ def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
 
         num_ree_valid += 1
 
-    if num_ree_valid == 0:
+    degrees_of_freedom = num_residuals - 3
+    if num_ree_valid == 0 or degrees_of_freedom <= 0:
         return None, None, None, None
 
-    total_misfit_grid = np.where(valid_mask, np.sqrt(total_sq_grid / num_residuals), np.nan)
+    total_misfit_grid = np.where(valid_mask, np.sqrt(total_sq_grid / degrees_of_freedom), np.nan)
 
     if not valid_mask.any():
         return total_misfit_grid, None, None, dict_mix
