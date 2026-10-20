@@ -277,7 +277,7 @@ Both files share these columns:
 | `F_mean`, `F_min`, `F_max` | Mean, minimum and maximum melt fraction of the best-fit model |
 | `M_mean`, `M_min`, `M_max` | Mean, minimum and maximum melting rate of the best-fit model |
 | `basalt_percentage` | Best-fit **relative source enrichment**. Positive values (0 to 15) are the % of basalt mixed into primitive mantle. Negative values (−100 to −5, only with `--depleted`) are the % of depleted mantle mixed into primitive mantle. |
-| `misfit_value` | Misfit of the best-fit model (lower is better) |
+| `misfit_value` | RMS log10 misfit of the best-fit model (lower is better; see [§5](#5-how-the-inversion-works)) |
 | `global_min_value` | Lowest misfit anywhere in the full temperature–thickness–enrichment search |
 | `ratio_of_local_global_misfit` | `misfit_value / global_min_value`. A value of 1 means the reported solution is the global minimum. |
 | `litho_thickness_ref` | Your optional `thickness` value (empty if not supplied) |
@@ -369,7 +369,7 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 2. **Source enrichment.** For each trial enrichment value, the model REE concentrations are rescaled for a source made by mixing:
    - primitive mantle (McDonough & Sun, 1995) with 0 to 15% basalt (Sun & McDonough, 1989), in steps of 0.1%; or
    - with `--depleted`, primitive mantle with 5 to 100% depleted mantle (Salters & Stracke, 2004).
-3. **Misfit.** For each sample, meltinv computes the log10 misfit between the sample and the model for each element, then averages over all elements the sample has values for.
+3. **Misfit.** For each sample, the misfit is the root-mean-square (RMS) of the log10 residuals over the N usable REE: misfit = √( Σ (log10 c_model − log10 c_sample)² / N ). A misfit of 0.1 means the model and sample differ by a factor of about 10^0.1 ≈ 1.26 (26%) on a typical element.
 4. **Best fit.** For each sample, the temperature, thickness and enrichment combination with the lowest misfit is reported.
 5. **Calibration.** The grid assumes a peridotite source. The best-fit temperature and thickness are then corrected for the effect of a pyroxenite (G2) component on the solidus. This uses flux-weighted mixing (Phipps Morgan, 2001; Sobolev et al., 2007), with the pyroxenite fraction taken from the inverted enrichment. The results are the `_cali` columns.
 6. **Location summary.** The per-sample results are combined for each location with a misfit-weighted average, as described in [Step 4](#step-4-reading-the-results).

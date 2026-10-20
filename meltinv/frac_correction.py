@@ -1,5 +1,6 @@
 import pandas as pd
-from meltPT import *
+import numpy as np
+import warnings
 from pathlib import Path
 
 def get_and_check_file(file_name):
@@ -47,10 +48,24 @@ def save_fraction(file_name, sample_df, primary_composition_df):
     base_name = Path(file_name).stem
     output_file = results_dir / f"{base_name}_corrected.xlsx"
 
-    olv_added = primary_composition_df['ol_added'].fillna(0)
+    # A correction counts as successful only if meltPT returned a valid olivine addition
+    # and a complete primary major-element composition; otherwise the REE are set to missing
+    sample_df = sample_df.copy()
+    primary_composition_df = primary_composition_df.reindex(sample_df.index)
+    olv_added = pd.to_numeric(primary_composition_df['ol_added'], errors='coerce')
+    primary_cols = [f'{col}_primary_wt' for col in
+                    ['SiO2', 'TiO2', 'Al2O3', 'FeO', 'CaO', 'MgO', 'MnO', 'K2O', 'Na2O', 'P2O5']]
+    valid = (np.isfinite(olv_added) & olv_added.between(0, 1, inclusive='left')
+             & np.isfinite(primary_composition_df[primary_cols]).all(axis=1))
+    if not valid.all():
+        warnings.warn(f"Fractionation correction failed for {(~valid).sum()} sample(s); "
+                      "their corrected REE values are missing", RuntimeWarning)
+    olv_added = olv_added.where(valid)
+    sample_df["correction_success"] = valid
     columns_to_multiply = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd', 'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
     sample_df["ol_added"] = olv_added
-    sample_df[columns_to_multiply] = sample_df[columns_to_multiply].mul(1 - olv_added, axis=0)
+    sample_df[columns_to_multiply] = (sample_df[columns_to_multiply].apply(pd.to_numeric, errors="coerce")
+                                      .mul(1 - olv_added, axis=0))
 
     major_columns = ['SiO2', 'TiO2', 'Al2O3', 'FeO', 'CaO', 'MgO', 'MnO', 'K2O', 'Na2O', 'P2O5']
 
@@ -65,6 +80,9 @@ def save_fraction(file_name, sample_df, primary_composition_df):
     return sample_df
 
 def fractionation_correction(file_name, src_Fo=0.9, max_olivine_addition=0.4):
+    # Import meltPT only when a correction is requested
+    from meltPT import Suite, BacktrackOlivineFractionation
+
     sample_df, file_path = get_and_check_file(file_name)
     s = Suite(file_path, src_Fo=src_Fo)
     b = BacktrackOlivineFractionation(verbose=True, max_olivine_addition=max_olivine_addition)

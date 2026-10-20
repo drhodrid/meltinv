@@ -182,13 +182,9 @@ def save_results(file_name, inv_result_df, suffix="_group_inversion_summary_log1
 
 def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
     """
-    Compute total normalized misfit grid for one enrichment scale value.
+    RMS log10 misfit grid for one enrichment value. Model cells with a missing or
+    non-positive prediction for any measured element are excluded (NaN).
     """
-    PM_1995_list = [
-        0.648, 1.675, 0.254, 1.250, 0.406, 0.154,
-        0.544, 0.099, 0.674, 0.149, 0.438, 0.068,
-        0.441, 0.0675]
-
     ree_variables = grids["ree_variables"]
     simulation = grids["simulation"]
 
@@ -196,64 +192,44 @@ def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
     dict_mix = source_composition_mix(scale_val)
     simulation_scaled = apply_mixing(simulation, ree_variables, dict_mix)
 
-    valid_mask = ~np.isnan(simulation_scaled[0])
-    total_misfit_grid = np.zeros_like(simulation_scaled[0], dtype=float)
+    valid_mask = np.ones_like(simulation_scaled[0], dtype=bool)
 
+    # Root-mean-square log10 residual over all usable REE values:
+    # sqrt( sum of squared residuals / number of residuals )
+    total_sq_grid = np.zeros_like(simulation_scaled[0], dtype=float)
+    num_residuals = 0
     num_ree_valid = 0
 
     for i, ree in enumerate(ree_variables):
-        c_sample = df[mask][ree]
-        sample_count = np.count_nonzero(~np.isnan(c_sample))
+        c_sample = pd.to_numeric(df.loc[mask, ree], errors="coerce").to_numpy(dtype=float)
+        c_sample = c_sample[np.isfinite(c_sample) & (c_sample > 0)]
 
-        if sample_count < min_sample_count:
+        if len(c_sample) < min_sample_count:
             continue
 
-        misfit_grid = np.zeros_like(total_misfit_grid)
+        # Only model cells with a finite, positive prediction for this element can be fitted
+        model = simulation_scaled[i]
+        usable = np.isfinite(model) & (model > 0)
+        valid_mask &= usable
 
         for c_l in c_sample:
-            if c_l > 0:
-                misfit_grid[valid_mask] += (
-                    np.log10(simulation_scaled[i][valid_mask]) - np.log10(c_l)
-                ) ** 2
+            total_sq_grid[usable] += (np.log10(model[usable]) - np.log10(c_l)) ** 2
+            num_residuals += 1
 
-        std = np.nanstd(c_sample)
-
-        misfit_grid[valid_mask] = (
-            np.sqrt(misfit_grid[valid_mask] / sample_count)
-        )
-
-        misfit_grid = np.where(valid_mask, misfit_grid, np.nan)
-
-        total_misfit_grid += misfit_grid
         num_ree_valid += 1
 
     if num_ree_valid == 0:
         return None, None, None, None
 
-    total_misfit_grid /= num_ree_valid
+    total_misfit_grid = np.where(valid_mask, np.sqrt(total_sq_grid / num_residuals), np.nan)
 
-    # Threshold selection
-    valid_positive_mask = (total_misfit_grid > 0)
-    valid_positive = total_misfit_grid[valid_positive_mask]
+    if not valid_mask.any():
+        return total_misfit_grid, None, None, dict_mix
 
-    if len(valid_positive) == 0:
-        return None, None, None, None
-
-    threshold = np.percentile(valid_positive, 10)
-    threshold_mask = (total_misfit_grid < threshold) & valid_positive_mask
-
-    threshold_indices = np.argwhere(threshold_mask)
-
-    if len(threshold_indices) == 0:
-        return total_misfit_grid, threshold, None, dict_mix
-
-    min_val = np.inf
-    min_idx = None
-    for idx in threshold_indices:
-        val = total_misfit_grid[tuple(idx)]
-        if val < min_val:
-            min_val = val
-            min_idx = tuple(idx)
+    # The best fit is the global minimum (an exact match with zero misfit included);
+    # the 10th-percentile threshold is kept for reference only
+    threshold = np.percentile(total_misfit_grid[valid_mask], 10)
+    min_idx = np.unravel_index(np.nanargmin(total_misfit_grid), total_misfit_grid.shape)
 
     return total_misfit_grid, threshold, min_idx, dict_mix
 
@@ -390,7 +366,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
         "global_min_value": np.nanmin(full_3d_grids),
         "global_flat_index": global_flat_index,
         "mean_ree_global": mean_ree_global,
-        "ratio_of_local_global_misfit": best_result["min_misfit_value"] / np.nanmin(full_3d_grids),
+        "ratio_of_local_global_misfit": (1.0 if np.nanmin(full_3d_grids) == 0 else
+                                         best_result["min_misfit_value"] / np.nanmin(full_3d_grids)),
         "misfit_grid": best_result["misfit_grid"],
         "threshold": best_result["threshold"],
         "mean_ree": mean_ree,
@@ -451,8 +428,8 @@ def plot_results(df, location, count, result):
 
     ax.legend(loc='lower left')
 
-    inv_temp = int(65 + 5 * t_idx)
-    inv_thickness = int(15 + 2 * p_idx)
+    inv_temp = int(result["T_mean"])
+    inv_thickness = int(result["depth_mean"])
     inv_basalt = result["basalt_percentage"]
     ax.text(0.99, 0.987, f"{location}", ha='right', va='top', fontweight='bold', transform=ax.transAxes)
     ax.text(0.99, 0.93, f'Temperature = {inv_temp} K\nThickness = {inv_thickness} km'
@@ -460,18 +437,20 @@ def plot_results(df, location, count, result):
 
     # Plot on left panel
     ax = axs[0, 1]
-    best_misfit_grid = result["misfit_grid"] / min_value
+    plot_scale = min_value if min_value > 0 else 1.0
+    misfit_label = "misfit / minimum misfit" if min_value > 0 else "absolute log10 misfit (exact best fit)"
+    best_misfit_grid = result["misfit_grid"] / plot_scale
 
     litho_thickness_ref = result["litho_thickness_ref"]
     basalt_percentage = result["basalt_percentage"]
 
-    masked_grid = np.ma.masked_where((best_misfit_grid <= 0) | np.isnan(best_misfit_grid), best_misfit_grid)
+    masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
     # Set colormap with masked color as white
     cmap = plt.colormaps.get_cmap('viridis').copy()
     cmap.set_bad(color='white')
     # Plot masked grid
     im = ax.imshow(masked_grid, cmap=cmap)
-    cbar = fig.colorbar(im, ax=ax, label='misfit / minimum misfit')
+    cbar = fig.colorbar(im, ax=ax, label=misfit_label)
     cbar.ax.yaxis.set_major_formatter('{:.1f}'.format)
 
     # Set limits to match data
@@ -485,7 +464,7 @@ def plot_results(df, location, count, result):
     ax.set_xticks(ticks=x_ticks, labels=x_labels)
 
     y_ticks = np.arange(0, ny, 10)
-    y_labels = 15 + 2 * y_ticks
+    y_labels = 16 + 2 * y_ticks
     ax.set_yticks(ticks=y_ticks, labels=y_labels)
 
     ax.set_xlabel('Excess Temperature (K)')
@@ -500,15 +479,15 @@ def plot_results(df, location, count, result):
     cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
     ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
     if litho_thickness_ref is not None:
-        ax.axhline((litho_thickness_ref - 15) / 2, color='black', linestyle='--')
+        ax.axhline((litho_thickness_ref - 16) / 2, color='black', linestyle='--')
 
     ratio_of_local_global_misfit = result["ratio_of_local_global_misfit"]
 
     ax.text(0.02, 0.95, f"Ratio to Global Min Misfit = {ratio_of_local_global_misfit:.1f}", transform=ax.transAxes)
 
     ax = axs[1, 0]
-    best_misfit_grid = full_3d_grid[:, p_idx, :] / min_value
-    masked_grid = np.ma.masked_where((best_misfit_grid <= 0) | np.isnan(best_misfit_grid), best_misfit_grid)
+    best_misfit_grid = full_3d_grid[:, p_idx, :] / plot_scale
+    masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
 
     im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
     ax.set_xlim(0, nx)
@@ -528,13 +507,13 @@ def plot_results(df, location, count, result):
     ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
 
     ax = axs[1, 1]
-    best_misfit_grid = full_3d_grid[:, :, t_idx] / min_value
-    masked_grid = np.ma.masked_where((best_misfit_grid <= 0) | np.isnan(best_misfit_grid), best_misfit_grid)
+    best_misfit_grid = full_3d_grid[:, :, t_idx] / plot_scale
+    masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
     im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
     ax.set_xlim(0, ny)
 
     x_ticks = np.arange(0, ny, 10)
-    x_labels = 15 + 2 * x_ticks
+    x_labels = 16 + 2 * x_ticks
     ax.set_xticks(ticks=x_ticks, labels=x_labels)
     ax.set_xlabel('Lithospheric thickness (km)')
 
@@ -544,7 +523,7 @@ def plot_results(df, location, count, result):
     ax.plot(p_idx, basalt_idx, marker='*', color='red', markersize=10)
 
     if litho_thickness_ref is not None:
-        ax.axvline((litho_thickness_ref - 15) / 2, color='black', linestyle='--')
+        ax.axvline((litho_thickness_ref - 16) / 2, color='black', linestyle='--')
 
     ax.set_ylabel('Relative Enrichment')
 
@@ -638,6 +617,7 @@ def aggregate_per_sample_results(results_df):
                 row[f'{col}_err_minus'] = err_mean - std
                 row[f'{col}_err_plus'] = err_mean + std
         row['count'] = n
+        row['count_used'] = n_keep
         rows.append(row)
 
     return pd.DataFrame(rows)
@@ -732,13 +712,16 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
     else:
         df = fractionation_correction(file_name, src_Fo, max_olivine_addition)
 
-    # Treat zero, negative and non-numeric REE values as missing
+    # Treat zero, negative, infinite and non-numeric REE values as missing
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
                      'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
     df = df.copy()
     for ree in ree_variables:
         values = pd.to_numeric(df[ree], errors='coerce')
-        df[ree] = values.where(values > 0)
+        df[ree] = values.where(np.isfinite(values) & (values > 0))
+
+    if df["location"].isna().any() or df["location"].astype(str).str.strip().eq("").any():
+        raise ValueError("Every sample must have a non-empty location")
 
     # Invert every sample on its own: give each sample a unique location label
     sample_number = df.groupby("location").cumcount() + 1
@@ -778,6 +761,8 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
             if individual_sample_figures:
                 plot_results(df, location, count, result)
 
+    if not results:
+        raise ValueError("No valid model cell could be fitted to the supplied samples")
     results = pd.DataFrame(results)
 
     results["sample_number"] = results["location"].map(lambda x: location_map[x][1])
