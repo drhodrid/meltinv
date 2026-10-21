@@ -1,0 +1,5 @@
+#!/bin/bash
+# Binder (mybinder.org) runs this after setting up Python: install meltinv from this repository.
+# JupyterLab itself is already provided by Binder.
+set -euo pipefail
+pip install --no-cache-dir .
