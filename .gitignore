@@ -38,3 +38,8 @@ tutorials/output/
 
 # Jupyter backup copies
 .ipynb_checkpoints/
+
+# Tutorial data (needed by the tutorials)
+!tutorials/data/*.csv
+!tutorials/data/*.xlsx
+!tutorials/data/modern_OIB_precomputed/*.xlsx

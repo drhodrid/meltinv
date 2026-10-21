@@ -7,7 +7,7 @@ Step-by-step Jupyter notebooks that take you through a meltinv analysis. You can
 | Tutorial | What you will do | Data | Run time |
 |---|---|---|---|
 | [01 – Quick start](01_quick_start.ipynb) | Correct, invert and interpret the bundled example: input checks, olivine correction, results tables, figures and a comparison with seismic thickness | `examples.xlsx` (38 samples) | ~1 min |
-| 02 – Modern ocean-island basalts *(in preparation)* | The full dataset used in the paper, ending with the comparison figure | modern OIB (1,652 samples) | — |
+| [02 – Modern ocean-island basalts](02_modern_OIB.ipynb) | The paper's comparison: a hands-on run on five locations, then the full dataset (1,801 samples, 112 locations), quality checks, a comparison with seismic, thermobarometric and published estimates, and the paper figure with and without the T–P correction | `data/modern_OIB.xlsx` and the stored full results | ~2 min (about 10 min with `RUN_FULL_ANALYSIS = True`) |
 
 ## Reading the tutorials online
 
@@ -38,5 +38,7 @@ python -m jupyterlab
 Open a notebook and run the cells from top to bottom (**Run → Run All Cells**).
 
 If the first cell fails with `ModuleNotFoundError: No module named 'meltinv'`, the notebook is running in a different Python from the one meltinv is installed in. Close JupyterLab and start it again with `python -m jupyterlab` from the environment where you installed meltinv. On macOS, plain `jupyter lab` can pick the wrong Python.
+
+The data used by the tutorials, and their sources, are described in [data/README.md](data/README.md).
 
 Each tutorial writes its outputs to its own folder, `tutorials/output/<tutorial name>/`, so nothing is written into the rest of the repository. Delete that folder at any time to start again.
