@@ -29,3 +29,6 @@ comparison*png
 
 # macOS
 .DS_Store
+
+# Test reference data (needed by tests/test_reference.py)
+!tests/reference/*.csv

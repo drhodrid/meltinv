@@ -34,7 +34,8 @@ The package can be used from the **command line** or from **Python**. This READM
    - [Group inversion: the group_samples branch](#group-inversion-the-group_samples-branch)
 5. [How the inversion works](#5-how-the-inversion-works)
 6. [Troubleshooting](#6-troubleshooting)
-7. [Citation](#7-citation)
+7. [Running the tests](#7-running-the-tests)
+8. [Citation](#8-citation)
 
 ---
 
@@ -390,7 +391,40 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 
 ---
 
-## 7. Citation
+## 7. Running the tests
+
+meltinv has an automated test suite in `tests/`. It checks the misfit, the input cleaning, the olivine-correction handling, the location summaries and the command line, and compares a full inversion of the example data with stored reference results.
+
+Install the test dependencies once, from the repository folder:
+
+```bash
+pip install -e ".[test]"
+```
+
+Then run the tests:
+
+```bash
+pytest
+```
+
+This takes about 30 seconds. To also run the slower test that redoes the meltPT olivine correction:
+
+```bash
+pytest -m "slow or not slow"
+```
+
+The same tests run automatically on GitHub for every push and pull request (see the **Actions** tab).
+
+**When you change the code:**
+
+- If every test passes, the change has not affected anything the tests check.
+- If `test_reference.py` fails after a change that was meant to alter the results (for example a new misfit or calibration), regenerate the reference with `python tests/update_reference.py` (add `--correct` if the olivine correction changed), and say why in the commit message.
+- If a test fails after a change that was *not* meant to alter the results, the failure points to a bug.
+- When you fix a bug, add a test that would have caught it.
+
+---
+
+## 8. Citation
 
 If you use **meltinv** in your research, please cite:
 
