@@ -458,3 +458,61 @@ Jiang et al. (2026), xxx, *Journal Name*.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+### Calculate once and regenerate figures later
+
+Plot rendering now lives in `meltinv.plotting`. Numerical inversion does not
+import Matplotlib unless figures are requested. Existing plotting flags and
+imports such as `from meltinv.inversion import plot_results` remain supported.
+
+To save everything needed for the existing per-sample diagnostic and group
+comparison figures, opt into a plot archive during the inversion:
+
+```python
+from meltinv import invert, regenerate_figures
+
+results = invert(
+    "samples.csv",
+    individual_sample_figures=False,
+    group_comparison_figure=False,
+    plot_archive="run.zip",
+)
+# Later, even in a new Python session without samples.csv or the model grids:
+regenerate_figures("run.zip", output_dir="replotted_figures")
+```
+
+The equivalent CLI commands are:
+
+```sh
+meltinv invert samples.csv --no_group_comparison_figure --plot_archive run.zip
+meltinv plot run.zip --output_dir replotted_figures
+```
+
+`regenerate_figures` accepts `individual_sample_figures=False` or
+`group_comparison_figure=False` to render only one type; the CLI equivalents
+are `--no_individual` and `--no_groups`. Group figures retain the existing
+minimum of three fitted samples. Scientific settings and plot defaults are
+unchanged.
+
+The versioned ZIP contains a JSON manifest (run settings and package version),
+numeric NumPy arrays and string labels; loading does not use pickle. It saves
+the cleaned, optionally fractionation-corrected REE observations actually used,
+fitted REE curves and bounds, uncalibrated diagnostic annotations, the three
+misfit slices displayed in each diagnostic figure, and calibrated per-sample
+values for group plots. Floating-point arrays are stored without rounding.
+It is a **plotting snapshot**, not a full scientific provenance bundle or the
+complete three-dimensional search surface: arbitrary new slices require a new
+inversion. The existing Excel tables remain the full tabular output.
+
+Saving is optional because it adds computation and disk I/O. One sample's full
+surface is retained temporarily, its displayed slices are written to the archive,
+and the remaining surface is discarded. A failed run leaves any previous archive
+intact; a successful run replaces the requested archive path. When archive saving
+is disabled, the faster tabular-only path remains available. Exact pixel matches
+also require the same Matplotlib version, fonts and rendering environment.
+
+Archive saving can be included in the numerical equivalence check:
+
+```sh
+MPLBACKEND=Agg python tests/compare_search_revision.py --reference 0196fe6 --modern --plot-archive
+```

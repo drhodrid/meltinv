@@ -1,28 +1,11 @@
 import pandas as pd
 from pathlib import Path
-import matplotlib.pyplot as plt
 import importlib.resources as pkg_resources
 import numpy as np
 from .frac_correction import fractionation_correction
-from .plot_ree import plot_ree, plot_ree_range
+from .plot_archive import PlotArchiveWriter
 from ._misfit import ModelLogCache, prepare_observations, evaluate_misfit
 
-def compress_enrichment(e):
-    """Same display transform as plot_multiple_slices.py: divide negative
-    (depleted) basalt_percentage values by 100, leave enriched (>=0) as is."""
-    e = np.asarray(e, dtype=float)
-    return np.where(e < 0, e / 100, e)
-
-
-def misfit_weighted_stats(values, misfit):
-    """
-    Mean and std over all samples, weighted by 1/misfit.
-    """
-    values, misfit = np.asarray(values, dtype=float), np.asarray(misfit, dtype=float)
-    w = 1.0 / (misfit + 1e-6)
-    mean = np.average(values, weights=w)
-    std = np.sqrt(np.average((values - mean) ** 2, weights=w))
-    return mean, std
 
 def source_composition_mix(basalt_perc):
     PM_1995 = {
@@ -342,162 +325,6 @@ def remove_keys(d, keys):
         keys = [keys]
     return {k: v for k, v in new_d.items() if k not in keys}
 
-def enrichment_ticks(enrichment_values):
-    """Tick positions/labels for the (possibly non-uniformly spaced) enrichment
-    axis: nearest grid index to a set of round target values."""
-    ev = np.asarray(enrichment_values, dtype=float)
-    targets = [-100, -50, 0, 5, 10, 15] if ev.min() < 0 else [0, 3, 6, 9, 12, 15]
-    ticks = sorted({int(np.abs(ev - t).argmin()) for t in targets})
-    return ticks, [f"{ev[i]:g}" for i in ticks]
-
-def plot_results(df, location, count, result):
-    fig, axs = plt.subplots(2, 2, figsize=(9, 7.35), layout='constrained')
-
-    # Plot on left panel
-    ax = axs[0, 0]
-
-    if result["min_idx"] is None:
-        return
-    else:
-        p_idx, t_idx = result["min_idx"]
-        min_value = result["misfit_value"]
-        full_3d_grid = result["full_3d_grids"]
-        global_min_value = result["global_min_value"]
-        global_flat_index = result["global_flat_index"]
-        e_i, p_i, t_i = np.unravel_index(global_flat_index, full_3d_grid.shape)
-        basalt_idx = result["basalt_idx"]
-        enrichment_values = np.asarray(result["enrichment_values"], dtype=float)
-
-    ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
-                     'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
-
-    mask = df["location"] == location
-    sample_values = df[ree_variables][mask].to_numpy()
-
-    flag = 0
-    for i in sample_values:
-        if flag == 0:
-            plot_ree(ax, i, 'k', 2, label='Sample')
-            flag = 1
-        else:
-            plot_ree(ax, i, 'k', 2, label=None)
-
-    plot_ree(ax, result["mean_ree_global"], 'orange', 2, label='Global Best Fit')
-    plot_ree(ax, result["mean_ree"], 'red', 2, label='Best Fit')
-    plot_ree_range(ax, result["mean_ree"], result["low_ree"], result["high_ree"])
-
-    ax.legend(loc='lower left')
-
-    inv_temp = int(result["T_mean"])
-    inv_thickness = int(result["depth_mean"])
-    inv_basalt = result["basalt_percentage"]
-    ax.text(0.99, 0.987, f"{location}", ha='right', va='top', fontweight='bold', transform=ax.transAxes)
-    ax.text(0.99, 0.93, f'Temperature = {inv_temp} K\nThickness = {inv_thickness} km'
-                        f'\nEnrichment Factor = {inv_basalt:.1f}', transform=ax.transAxes, ha='right', va='top', multialignment='right')
-
-    # Plot on left panel
-    ax = axs[0, 1]
-    plot_scale = min_value if min_value > 0 else 1.0
-    misfit_label = "misfit / minimum misfit" if min_value > 0 else "absolute log10 misfit (exact best fit)"
-    best_misfit_grid = result["misfit_grid"] / plot_scale
-
-    litho_thickness_ref = result["litho_thickness_ref"]
-    basalt_percentage = result["basalt_percentage"]
-
-    masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
-    # Set colormap with masked color as white
-    cmap = plt.colormaps.get_cmap('viridis').copy()
-    cmap.set_bad(color='white')
-    # Plot masked grid
-    im = ax.imshow(masked_grid, cmap=cmap)
-    cbar = fig.colorbar(im, ax=ax, label=misfit_label)
-    cbar.ax.yaxis.set_major_formatter('{:.1f}'.format)
-
-    # Set limits to match data
-    nx = 58
-    ny = 53
-    ax.set_xlim(0, nx)
-    ax.set_ylim(ny, 0)
-
-    x_ticks = np.arange(0, nx, 10)
-    x_labels = 65 + 5 * x_ticks
-    ax.set_xticks(ticks=x_ticks, labels=x_labels)
-
-    y_ticks = np.arange(0, ny, 10)
-    y_labels = 16 + 2 * y_ticks
-    ax.set_yticks(ticks=y_ticks, labels=y_labels)
-
-    ax.set_xlabel('Excess Temperature (K)')
-    ax.set_ylabel('Lithospheric thickness (km)')
-
-    # Find min positive L2 norm value and its location
-    ax.plot(t_i, p_i, marker='o', color='orange', markersize=10)
-    ax.plot(t_idx, p_idx, marker='*', color='red', markersize=10)
-
-    # Contour for lowest 3% (excluding 0 and NaN)
-    levels = [1.1, 1.3, 1.5, 2, 2.5, 3, 5]
-    cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
-    ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
-    if litho_thickness_ref is not None:
-        ax.axhline((litho_thickness_ref - 16) / 2, color='black', linestyle='--')
-
-    ratio_of_local_global_misfit = result["ratio_of_local_global_misfit"]
-
-    ax.text(0.02, 0.95, f"Ratio to Global Min Misfit = {ratio_of_local_global_misfit:.1f}", transform=ax.transAxes)
-
-    ax = axs[1, 0]
-    best_misfit_grid = full_3d_grid[:, p_idx, :] / plot_scale
-    masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
-
-    im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
-    ax.set_xlim(0, nx)
-    x_ticks = np.arange(0, nx, 10)
-    x_labels = 65 + 5 * x_ticks
-    ax.set_xticks(ticks=x_ticks, labels=x_labels)
-    ax.set_xlabel('Excess Temperature (K)')
-
-    y_ticks, y_labels = enrichment_ticks(enrichment_values)
-    ax.set_yticks(ticks=y_ticks, labels=y_labels)
-    ax.plot(t_i, e_i, marker='o', color='orange', markersize=10)
-    ax.plot(t_idx, basalt_idx, marker='*', color='red', markersize=10)
-
-    ax.set_ylabel('Relative Enrichment')
-
-    cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
-    ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
-
-    ax = axs[1, 1]
-    best_misfit_grid = full_3d_grid[:, :, t_idx] / plot_scale
-    masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
-    im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
-    ax.set_xlim(0, ny)
-
-    x_ticks = np.arange(0, ny, 10)
-    x_labels = 16 + 2 * x_ticks
-    ax.set_xticks(ticks=x_ticks, labels=x_labels)
-    ax.set_xlabel('Lithospheric thickness (km)')
-
-    y_ticks, y_labels = enrichment_ticks(enrichment_values)
-    ax.set_yticks(ticks=y_ticks, labels=y_labels)
-    ax.plot(p_i, e_i, marker='o', color='orange', markersize=10)
-    ax.plot(p_idx, basalt_idx, marker='*', color='red', markersize=10)
-
-    if litho_thickness_ref is not None:
-        ax.axvline((litho_thickness_ref - 16) / 2, color='black', linestyle='--')
-
-    ax.set_ylabel('Relative Enrichment')
-
-    cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
-    ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
-
-    results_dir = Path("inversion_figures")
-    results_dir.mkdir(exist_ok=True)
-
-    output_file = results_dir / f"ree_comparison_{location}_log10_N{count}.png"
-
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
-    print(f"Figure saved to: {output_file.resolve()}")
-    plt.close(fig)
 
 def calibration(T, P, h, b):
     """Apply the existing post-inversion solidus-offset prescription.
@@ -579,180 +406,117 @@ def aggregate_per_sample_results(results_df):
     return pd.DataFrame(rows)
 
 
-def plot_group_comparison(results_df, min_count=3):
-    """
-    Plot one figure per location comparing its per-sample temperature,
-    thickness and enrichment results. Locations with fewer than min_count samples are skipped.
-    """
-    results_dir = Path("inversion_figures")
-    results_dir.mkdir(exist_ok=True)
-
-    for location, group in results_df.groupby("location"):
-        group_number = len(group)
-        if group_number < min_count:
-            print(f"Skipping group comparison figure for {location}: "
-                  f"{group_number} sample(s), at least {min_count} needed.")
-            continue
-
-        thickness = group["depth_mean_cali"].to_numpy(dtype=float)
-        temperature = group["T_mean_cali"].to_numpy(dtype=float)
-        enrichment = compress_enrichment(group["basalt_percentage"])
-        misfit = group["misfit_value"].to_numpy(dtype=float)
-        misfit_kwargs = dict(c=misfit * 100, cmap="Blues_r", vmin=0.0, vmax=3, edgecolors="k")
-        label_size = 8
-
-        fig, axs = plt.subplots(2, 2, figsize=(9, 7))
-
-        ax = axs[0, 0]
-        ax.scatter(temperature, thickness, **misfit_kwargs)
-        ax.set_ylabel("Lithospheric Thickness (km)")
-        ax.set_xlabel("Excess Temperature (K)")
-        ax.set_ylim(15, 130)
-        ax.set_xlim(50, 300)
-        ax.text(0.02, 0.97, "(a)", transform=ax.transAxes, va="top", ha="left")
-
-        ax = axs[0, 1]
-        sc = ax.scatter(enrichment, thickness, **misfit_kwargs)
-        ax.set_ylabel("Thickness (km)")
-        ax.set_xlabel("Relative Enrichment")
-        ax.set_ylim(15, 130)
-        ax.set_xlim(-1.2, 16)
-        cbar = fig.colorbar(sc, ax=ax)
-        cbar.ax.tick_params(labelsize=label_size)
-        cbar.set_ticks(np.linspace(0, 3, 7))
-        cbar.set_label(r"Misfit (×10$^{-2}$)", fontsize=label_size)
-        ax.text(0.02, 0.97, "(b)", transform=ax.transAxes, va="top", ha="left")
-
-        ax = axs[1, 0]
-        ax.scatter(temperature, enrichment, **misfit_kwargs)
-        ax.set_ylabel("Relative Enrichment")
-        ax.set_xlabel("Excess Temperature (K)")
-        ax.set_ylim(-1.2, 16)
-        ax.set_xlim(50, 300)
-        ax.text(0.02, 0.97, "(c)", transform=ax.transAxes, va="top", ha="left")
-
-        subspec = axs[1, 1].get_subplotspec()
-        axs[1, 1].remove()
-        gs_sub = subspec.subgridspec(3, 1, hspace=0.7)
-
-        histograms = [
-            (temperature, np.linspace(50, 300, 26), "orange", (50, 300), "(d-1) Excess Temperature (K)"),
-            (thickness, np.linspace(15, 130, 26), "steelblue", (15, 130), "(d-2) Lithospheric Thickness (km)"),
-            (enrichment, np.linspace(-1., 16, 18), "seagreen", (-1.2, 16), "(d-3) Relative Enrichment"),
-        ]
-        for i, (values, bins, color, xlim, title) in enumerate(histograms):
-            mean, std = misfit_weighted_stats(values, misfit)
-            ax = fig.add_subplot(gs_sub[i])
-            ax.tick_params(axis="both", labelsize=label_size)
-            ax.hist(values, bins=bins, color=color, edgecolor="black")
-            ax.axvspan(mean - std, mean + std, color="black", alpha=0.15)
-            ax.axvline(mean, color="black", linestyle="--", linewidth=1.5)
-            ax.set_xlim(*xlim)
-            ax.text(0.0, 1.02, title, transform=ax.transAxes,
-                    va="bottom", ha="left", fontsize=label_size + 1)
-
-        fig.suptitle(f"{location} (N={group_number})")
-        fig.tight_layout(pad=0.5, w_pad=0.3, h_pad=0.3)
-
-        output_file = results_dir / f"group_comparison_{location}_N{group_number}.png"
-        plt.savefig(output_file, dpi=350)
-        print(f"Figure saved to: {output_file.resolve()}")
-        plt.close(fig)
-
-
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, individual_sample_figures=False,
-                          group_comparison_figure=True):
-    if correction == False:
-        df = read_melt_composition(file_name)
-    else:
-        df = fractionation_correction(file_name, src_Fo, max_olivine_addition)
+                          group_comparison_figure=True, *, plot_archive=None):
+    """Invert samples; optionally save a self-contained archive for later plotting."""
+    from contextlib import nullcontext
+    context = (PlotArchiveWriter(plot_archive, {
+        "input_file": str(file_name), "depleted_location": depleted_location,
+        "correction": correction, "src_Fo": src_Fo,
+        "max_olivine_addition": max_olivine_addition,
+    }) if plot_archive is not None else nullcontext())
+    with context as archive:
+        if correction == False:
+            df = read_melt_composition(file_name)
+        else:
+            df = fractionation_correction(file_name, src_Fo, max_olivine_addition)
 
-    # Treat zero, negative, infinite and non-numeric REE values as missing
-    ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
-                     'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
-    df = df.copy()
-    for ree in ree_variables:
-        values = pd.to_numeric(df[ree], errors='coerce')
-        df[ree] = values.where(np.isfinite(values) & (values > 0))
+        # Treat zero, negative, infinite and non-numeric REE values as missing
+        ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
+                         'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
+        df = df.copy()
+        for ree in ree_variables:
+            values = pd.to_numeric(df[ree], errors='coerce')
+            df[ree] = values.where(np.isfinite(values) & (values > 0))
 
-    if df["location"].isna().any() or df["location"].astype(str).str.strip().eq("").any():
-        raise ValueError("Every sample must have a non-empty location")
+        if df["location"].isna().any() or df["location"].astype(str).str.strip().eq("").any():
+            raise ValueError("Every sample must have a non-empty location")
 
-    # Invert every sample on its own: give each sample a unique location label
-    sample_number = df.groupby("location").cumcount() + 1
-    original_location = df["location"]
-    original_position = range(len(df))
-    df["location"] = original_location.astype(str) + "__sample" + sample_number.astype(str)
-    location_map = dict(zip(df["location"], zip(original_location, sample_number, original_position)))
+        # Invert every sample on its own: give each sample a unique location label
+        sample_number = df.groupby("location").cumcount() + 1
+        original_location = df["location"]
+        original_position = range(len(df))
+        df["location"] = original_location.astype(str) + "__sample" + sample_number.astype(str)
+        location_map = dict(zip(df["location"], zip(original_location, sample_number, original_position)))
 
-    # Skip samples with fewer than min_ree usable REE values
-    min_ree = 6
-    ree_count = df[ree_variables].notna().sum(axis=1)
-    for label, n_ree in zip(df.loc[ree_count < min_ree, "location"], ree_count[ree_count < min_ree]):
-        location, number, _ = location_map[label]
-        print(f"Skipping {location} sample {number}: {n_ree} usable REE value(s), at least {min_ree} needed.")
-    df = df[ree_count >= min_ree]
-    if df.empty:
-        raise ValueError(f"No sample has at least {min_ree} usable REE values, so nothing can be inverted.")
+        # Skip samples with fewer than min_ree usable REE values
+        min_ree = 6
+        ree_count = df[ree_variables].notna().sum(axis=1)
+        for label, n_ree in zip(df.loc[ree_count < min_ree, "location"], ree_count[ree_count < min_ree]):
+            location, number, _ = location_map[label]
+            print(f"Skipping {location} sample {number}: {n_ree} usable REE value(s), at least {min_ree} needed.")
+        df = df[ree_count >= min_ree]
+        if df.empty:
+            raise ValueError(f"No sample has at least {min_ree} usable REE values, so nothing can be inverted.")
 
-    group_list = build_group_list(df, min_count=1)
-    grids = load_all_grids()
-    model_cache = ModelLogCache(grids, source_composition_mix)
-    results = []
-    for g_i, group in enumerate(group_list):
-        location, count = group
-        test_enrichment_values = get_enrichment_values(location, depleted_location)
-        result = invert_single_group(df, location, count, grids, test_enrichment_values,
-                                     min_sample_count=1, model_cache=model_cache,
-                                     retain_diagnostics=individual_sample_figures)
+        group_list = build_group_list(df, min_count=1)
+        grids = load_all_grids()
+        model_cache = ModelLogCache(grids, source_composition_mix)
+        results = []
+        for g_i, group in enumerate(group_list):
+            location, count = group
+            test_enrichment_values = get_enrichment_values(location, depleted_location)
+            result = invert_single_group(df, location, count, grids, test_enrichment_values,
+                                         min_sample_count=1, model_cache=model_cache,
+                                         retain_diagnostics=individual_sample_figures or plot_archive is not None)
 
-        if result is not None:
-            result["location"] = location
-            result["count"] = count
+            if result is not None:
+                result["location"] = location
+                result["count"] = count
 
-            keys_to_be_removed = ["full_3d_grids", "misfit_grid", "threshold", "scaling_factors",
-                                  "mean_ree", "mean_ree_global", "low_ree", "high_ree", "min_idx", "global_flat_index",
-                                  "basalt_idx", "enrichment_values"]
-            results.append(remove_keys(result, keys_to_be_removed))
+                keys_to_be_removed = ["full_3d_grids", "misfit_grid", "threshold", "scaling_factors",
+                                      "mean_ree", "mean_ree_global", "low_ree", "high_ree", "min_idx", "global_flat_index",
+                                      "basalt_idx", "enrichment_values"]
+                results.append(remove_keys(result, keys_to_be_removed))
 
-            if individual_sample_figures:
-                plot_results(df, location, count, result)
+                if archive is not None:
+                    archive.add_sample(df, location, count, result)
+                if individual_sample_figures:
+                    from .plotting import plot_results
+                    plot_results(df, location, count, result)
 
-    if not results:
-        raise ValueError("No valid model cell could be fitted to the supplied samples")
-    results = pd.DataFrame(results)
+        if not results:
+            raise ValueError("No valid model cell could be fitted to the supplied samples")
+        results = pd.DataFrame(results)
 
-    results["sample_number"] = results["location"].map(lambda x: location_map[x][1])
-    results["_original_position"] = results["location"].map(lambda x: location_map[x][2])
-    results["location"] = results["location"].map(lambda x: location_map[x][0])
-    results = results.sort_values("_original_position").drop(columns="_original_position").reset_index(drop=True)
+        results["sample_number"] = results["location"].map(lambda x: location_map[x][1])
+        results["_original_position"] = results["location"].map(lambda x: location_map[x][2])
+        results["location"] = results["location"].map(lambda x: location_map[x][0])
+        results = results.sort_values("_original_position").drop(columns="_original_position").reset_index(drop=True)
 
-    T_mean = results['T_mean']
-    P_mean = results['pres_mean']
-    depth_mean = results['depth_mean']
-    basalt_perc = results['basalt_percentage']
+        T_mean = results['T_mean']
+        P_mean = results['pres_mean']
+        depth_mean = results['depth_mean']
+        basalt_perc = results['basalt_percentage']
 
-    T_cali, h_cali = calibration(T_mean, P_mean, depth_mean, basalt_perc)
+        T_cali, h_cali = calibration(T_mean, P_mean, depth_mean, basalt_perc)
 
-    results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', T_cali)
-    results.insert(results.columns.get_loc('depth_mean') + 1, 'depth_mean_cali', h_cali)
+        results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', T_cali)
+        results.insert(results.columns.get_loc('depth_mean') + 1, 'depth_mean_cali', h_cali)
 
-    # Shift melting pressures by the same amount as the calibrated depth
-    for col in ['pres_mean', 'pres_min', 'pres_max']:
-        results[col] = results[col] + (h_cali - depth_mean)
-    results = results.rename(columns={'pres_mean': 'pres_mean_cali', 'pres_min': 'pres_min_cali',
-                                      'pres_max': 'pres_max_cali'})
-    summary_df = pd.DataFrame(results)
+        # Shift melting pressures by the same amount as the calibrated depth
+        for col in ['pres_mean', 'pres_min', 'pres_max']:
+            results[col] = results[col] + (h_cali - depth_mean)
+        results = results.rename(columns={'pres_mean': 'pres_mean_cali', 'pres_min': 'pres_min_cali',
+                                          'pres_max': 'pres_max_cali'})
+        summary_df = pd.DataFrame(results)
 
-    save_results(file_name, summary_df, suffix="_sample_inversion_log10.xlsx")
-    island_summary = aggregate_per_sample_results(summary_df)
-    save_results(file_name, island_summary, suffix="_sample_inversion_summary_log10.xlsx")
-    if group_comparison_figure:
-        plot_group_comparison(summary_df)
+        save_results(file_name, summary_df, suffix="_sample_inversion_log10.xlsx")
+        island_summary = aggregate_per_sample_results(summary_df)
+        save_results(file_name, island_summary, suffix="_sample_inversion_summary_log10.xlsx")
+        if archive is not None:
+            archive.add_summary(summary_df)
+        if group_comparison_figure:
+            from .plotting import plot_group_comparison
+            plot_group_comparison(summary_df)
 
-    return summary_df
+        return summary_df
 
 
-
-
+def __getattr__(name):
+    if name in {"plot_results", "plot_group_comparison", "compress_enrichment",
+                "enrichment_ticks", "misfit_weighted_stats"}:
+        from . import plotting
+        return getattr(plotting, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

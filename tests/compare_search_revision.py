@@ -30,6 +30,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--reference', required=True)
     parser.add_argument('--modern', action='store_true')
+    parser.add_argument('--plot-archive', action='store_true',
+                        help='Also exercise archive saving in the candidate run')
     args = parser.parse_args()
     revision = subprocess.check_output(
         ['git', 'rev-parse', args.reference], cwd=ROOT, text=True).strip()
@@ -52,7 +54,9 @@ def main():
                     start = time.perf_counter()
                     result = module.invert_melt_condition(
                         dataset, depleted_location=['Iceland', 'Galapagos'],
-                        group_comparison_figure=False)
+                        group_comparison_figure=False,
+                        **({'plot_archive': 'run.zip'}
+                           if name == 'candidate' and args.plot_archive else {}))
                     times.append(time.perf_counter() - start)
                 outputs = {p.name: pd.read_excel(p) for p in sorted(
                     (work / 'inversion_results').glob('*.xlsx'))}
@@ -65,6 +69,7 @@ def main():
                                               check_exact=True)
             print(json.dumps({
                 'reference': revision, 'dataset': str(dataset.relative_to(ROOT)),
+                'candidate_saved_plot_archive': args.plot_archive,
                 'samples': len(frames[0][0]), 'all_table_values_exactly_equal': True,
                 'baseline_seconds': times[0], 'candidate_seconds': times[1],
                 'speedup': times[0] / times[1], 'python': platform.python_version(),
