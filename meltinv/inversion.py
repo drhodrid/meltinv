@@ -602,11 +602,9 @@ def aggregate_per_sample_results(results_df):
             mean = np.average(values, weights=col_weights)
             row[col] = mean
             if col in err_columns:
-                err_values = compress_enrichment(values) if col == 'basalt_percentage' else values
-                err_mean = np.average(err_values, weights=col_weights)
-                std = np.sqrt(np.average((err_values - err_mean) ** 2, weights=col_weights))
-                row[f'{col}_err_minus'] = err_mean - std
-                row[f'{col}_err_plus'] = err_mean + std
+                std = np.sqrt(np.average((values - mean) ** 2, weights=col_weights))
+                row[f'{col}_err_minus'] = mean - std
+                row[f'{col}_err_plus'] = mean + std
         row['count'] = n
         rows.append(row)
 

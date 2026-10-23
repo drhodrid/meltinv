@@ -44,9 +44,9 @@ def test_each_location_is_summarised_separately():
     assert out.loc["B", "T_mean_cali_err_minus"] == pytest.approx(200.0)    # one sample: no spread
 
 
-def test_depleted_enrichment_bounds_use_the_compressed_scale():
-    # Negative (depleted) values are divided by 100 for the _err columns only.
+def test_depleted_enrichment_bounds_are_in_the_same_units_as_the_mean():
+    # Negative (depleted) values stay in percent; only figures compress them.
     out = aggregate_per_sample_results(per_sample("A", [100.0, 100.0], [0.02, 0.02], [-100.0, -50.0])).iloc[0]
     assert out.basalt_percentage == pytest.approx(-75.0)
-    assert out.basalt_percentage_err_minus == pytest.approx(-1.0)
-    assert out.basalt_percentage_err_plus == pytest.approx(-0.5)
+    assert out.basalt_percentage_err_minus == pytest.approx(-100.0)
+    assert out.basalt_percentage_err_plus == pytest.approx(-50.0)
