@@ -13,7 +13,9 @@ def compress_enrichment(e):
 
 def misfit_weighted_stats(values, misfit):
     """
-    Mean and std over all samples, weighted by 1/misfit.
+    Descriptive mean and population spread, weighted by 1 / (misfit + 1e-6).
+    The small offset is the existing rule for handling exact fits; this is not
+    an uncertainty model or a standard error of the mean.
     """
     values, misfit = np.asarray(values, dtype=float), np.asarray(misfit, dtype=float)
     w = 1.0 / (misfit + 1e-6)
@@ -32,23 +34,38 @@ def enrichment_ticks(enrichment_values):
 
 
 def plot_results(df, location, count, result, output_dir="inversion_figures"):
-    fig, axs = plt.subplots(2, 2, figsize=(9, 7.35), layout='constrained')
+    """Draw the observed/fitted REEs and three slices through the best fit.
 
-    # Plot on left panel
-    ax = axs[0, 0]
-
+    df contains cleaned primary-magma REEs in ppm and a location column.
+    result comes from invert_single_group(retain_diagnostics=True), or from a
+    saved plotting archive. The labels and slices describe the *uncalibrated*
+    best fit; group plots below use calibrated per-sample results. See
+    docs/code-guide.md for the dictionary fields and array axes.
+    """
     if result["min_idx"] is None:
         return
+
+    p_idx, t_idx = result["min_idx"]
+    min_value = result["misfit_value"]
+    full_3d_grid = result.get("full_3d_grids")
+    if full_3d_grid is not None:
+        grid_shape = full_3d_grid.shape
+        temperature_slice = full_3d_grid[:, p_idx, :]
+        depth_slice = full_3d_grid[:, :, t_idx]
+    elif all(key in result for key in ("grid_shape", "temperature_slice", "depth_slice")):
+        grid_shape = result["grid_shape"]
+        temperature_slice = result["temperature_slice"]
+        depth_slice = result["depth_slice"]
     else:
-        p_idx, t_idx = result["min_idx"]
-        min_value = result["misfit_value"]
-        full_3d_grid = result.get("full_3d_grids")
-        grid_shape = full_3d_grid.shape if full_3d_grid is not None else result["grid_shape"]
-        global_min_value = result["global_min_value"]
-        global_flat_index = result["global_flat_index"]
-        e_i, p_i, t_i = np.unravel_index(global_flat_index, grid_shape)
-        basalt_idx = result["basalt_idx"]
-        enrichment_values = np.asarray(result["enrichment_values"], dtype=float)
+        raise ValueError("Plot diagnostics are missing. Use retain_diagnostics=True "
+                         "when fitting, or regenerate_figures() with a saved plot archive.")
+    e_i, p_i, t_i = np.unravel_index(result["global_flat_index"], grid_shape)
+    basalt_idx = result["basalt_idx"]
+    enrichment_values = np.asarray(result["enrichment_values"], dtype=float)
+
+    fig, axs = plt.subplots(2, 2, figsize=(9, 7.35), layout='constrained')
+    # Top left: observed REEs and the fitted model envelope.
+    ax = axs[0, 0]
 
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
                      'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
@@ -56,13 +73,9 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     mask = df["location"] == location
     sample_values = df[ree_variables][mask].to_numpy()
 
-    flag = 0
-    for i in sample_values:
-        if flag == 0:
-            plot_ree(ax, i, 'k', 2, label='Sample')
-            flag = 1
-        else:
-            plot_ree(ax, i, 'k', 2, label=None)
+    for sample_index, concentrations in enumerate(sample_values):
+        label = 'Sample' if sample_index == 0 else None
+        plot_ree(ax, concentrations, 'k', 2, label=label)
 
     plot_ree(ax, result["mean_ree_global"], 'orange', 2, label='Global Best Fit')
     plot_ree(ax, result["mean_ree"], 'red', 2, label='Best Fit')
@@ -77,14 +90,13 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     ax.text(0.99, 0.93, f'Temperature = {inv_temp} K\nThickness = {inv_thickness} km'
                         f'\nEnrichment Factor = {inv_basalt:.1f}', transform=ax.transAxes, ha='right', va='top', multialignment='right')
 
-    # Plot on left panel
+    # Top right: temperature versus thickness at the best-fit enrichment.
     ax = axs[0, 1]
     plot_scale = min_value if min_value > 0 else 1.0
     misfit_label = "misfit / minimum misfit" if min_value > 0 else "absolute log10 misfit (exact best fit)"
     best_misfit_grid = result["misfit_grid"] / plot_scale
 
     litho_thickness_ref = result["litho_thickness_ref"]
-    basalt_percentage = result["basalt_percentage"]
 
     masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
     # Set colormap with masked color as white
@@ -95,9 +107,8 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     cbar = fig.colorbar(im, ax=ax, label=misfit_label)
     cbar.ax.yaxis.set_major_formatter('{:.1f}'.format)
 
-    # Set limits to match data
-    nx = 58
-    ny = 53
+    # Grid columns are 5 K apart from 65 K; rows are 2 km apart from 16 km.
+    ny, nx = result["misfit_grid"].shape
     ax.set_xlim(0, nx)
     ax.set_ylim(ny, 0)
 
@@ -112,11 +123,12 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     ax.set_xlabel('Excess Temperature (K)')
     ax.set_ylabel('Lithospheric thickness (km)')
 
-    # Find min positive L2 norm value and its location
+    # Retain both legacy markers; the exhaustive search makes them coincide.
     ax.plot(t_i, p_i, marker='o', color='orange', markersize=10)
     ax.plot(t_idx, p_idx, marker='*', color='red', markersize=10)
 
-    # Contour for lowest 3% (excluding 0 and NaN)
+    # Misfit-ratio contours, not percentiles or confidence intervals.
+    # For an exact fit (minimum zero), use absolute misfit to avoid division by zero.
     levels = [1.1, 1.3, 1.5, 2, 2.5, 3, 5]
     cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
     ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
@@ -128,8 +140,7 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     ax.text(0.02, 0.95, f"Ratio to Global Min Misfit = {ratio_of_local_global_misfit:.1f}", transform=ax.transAxes)
 
     ax = axs[1, 0]
-    best_misfit_grid = (full_3d_grid[:, p_idx, :] if full_3d_grid is not None
-                       else result["temperature_slice"]) / plot_scale
+    best_misfit_grid = temperature_slice / plot_scale
     masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
 
     im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
@@ -150,8 +161,7 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
 
     ax = axs[1, 1]
-    best_misfit_grid = (full_3d_grid[:, :, t_idx] if full_3d_grid is not None
-                       else result["depth_slice"]) / plot_scale
+    best_misfit_grid = depth_slice / plot_scale
     masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
     im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
     ax.set_xlim(0, ny)
@@ -188,6 +198,8 @@ def plot_group_comparison(results_df, min_count=3, output_dir="inversion_figures
     """
     Plot one figure per location comparing its per-sample temperature,
     thickness and enrichment results. Locations with fewer than min_count samples are skipped.
+    Temperature and thickness use calibrated columns. Enrichment is transformed
+    only for display; histogram statistics are computed after that transform.
     """
     results_dir = Path(output_dir)
     results_dir.mkdir(parents=True, exist_ok=True)

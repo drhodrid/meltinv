@@ -4,9 +4,11 @@ Only the three displayed misfit slices are saved, not the full search cube.
 Arrays retain their original precision. The archive is published atomically after
 successful inversion; a failed run does not replace an existing archive.
 """
+from importlib.metadata import version
 from io import BytesIO
 import json
 import os
+import platform
 from pathlib import Path
 import tempfile
 from zipfile import ZipFile, ZIP_DEFLATED
@@ -32,7 +34,12 @@ def _read_arrays(archive, name):
 
 
 class PlotArchiveWriter:
-    """Internal streaming writer. Keep at most one sample's diagnostics in memory."""
+    """Write one sample at a time rather than retaining all search surfaces.
+
+    Use as a context manager: add_sample() receives pre-calibration fit results;
+    add_summary() receives the final calibrated table. See docs/code-guide.md
+    for the on-disk schema. The inversion owns/relinquishes the full surface.
+    """
 
     def __init__(self, path, settings):
         self.path = Path(path).expanduser().resolve()
@@ -41,6 +48,10 @@ class PlotArchiveWriter:
     def __enter__(self):
         from . import __version__
         self.manifest['meltinv_version'] = __version__
+        self.manifest['environment'] = {
+            'python': platform.python_version(), 'numpy': np.__version__,
+            'pandas': pd.__version__, 'matplotlib': version('matplotlib'),
+        }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, self.temp = tempfile.mkstemp(dir=self.path.parent, suffix='.tmp')
         os.close(fd)
@@ -48,6 +59,7 @@ class PlotArchiveWriter:
         return self
 
     def add_sample(self, df, location, count, result):
+        """Save observations and the three slices used by the diagnostic figure."""
         cube = result['full_3d_grids']
         p_idx, t_idx = result['min_idx']
         # Store exactly the arrays consumed by plot_results, including uncorrected
@@ -61,14 +73,15 @@ class PlotArchiveWriter:
                       temperature_slice=cube[:, p_idx, :],
                       depth_slice=cube[:, :, t_idx],
                       observations=df.loc[df['location'] == location, REE].to_numpy(dtype=float))
-        ref = result['litho_thickness_ref']
-        if ref is not None:
-            arrays['litho_thickness_ref'] = np.asarray(ref)
+        reference_thickness = result['litho_thickness_ref']
+        if reference_thickness is not None:
+            arrays['litho_thickness_ref'] = np.asarray(reference_thickness)
         name = f'samples/{len(self.manifest["samples"]):06d}.npz'
         _write_arrays(self.archive, name, arrays)
         self.manifest['samples'].append({'file': name, 'location': location, 'count': int(count)})
 
     def add_summary(self, frame):
+        """Save only the columns needed by the calibrated group comparison plots."""
         arrays = {key: frame[key].to_numpy(dtype=str if key == 'location' else float)
                   for key in SUMMARY_COLUMNS}
         _write_arrays(self.archive, 'summary.npz', arrays)
@@ -95,9 +108,9 @@ def regenerate_figures(archive_path, output_dir='inversion_figures', *,
     fonts and rendering environment. No pickle objects are loaded.
     """
     from .plotting import plot_results, plot_group_comparison
-    with ZipFile(archive_path) as archive:
+    with ZipFile(Path(archive_path).expanduser()) as archive:
         manifest = json.loads(archive.read('manifest.json'))
-        if manifest['format_version'] != 1:
+        if manifest.get('format_version') != 1:
             raise ValueError('Unsupported meltinv plot archive version')
         if individual_sample_figures:
             for sample in manifest['samples']:

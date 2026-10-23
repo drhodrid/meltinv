@@ -1,3 +1,11 @@
+"""Numerical inversion and tabular outputs.
+
+Start at invert_melt_condition for the complete workflow: clean observations,
+fit each sample, apply post-fit calibration, then summarise by location.
+Plot rendering lives in plotting.py; plot_archive.py saves optional snapshots.
+See docs/code-guide.md for array axes, result fields and the distinction between
+uncorrected best-fit parameters and calibrated output columns.
+"""
 import pandas as pd
 from pathlib import Path
 import importlib.resources as pkg_resources
@@ -8,6 +16,13 @@ from ._misfit import ModelLogCache, prepare_observations, evaluate_misfit
 
 
 def source_composition_mix(basalt_perc):
+    """Return REE concentration multipliers relative to primitive mantle.
+
+    Positive percentages mix primitive mantle with the basalt endmember;
+    negative percentages use the absolute value as the depleted-mantle fraction.
+    For example, -50 denotes equal primitive/depleted-mantle mixing. This is the
+    existing source parameterisation, separate from the later calibration.
+    """
     PM_1995 = {
         "La": 0.648, "Ce": 1.675, "Pr": 0.254, "Nd": 1.250, "Sm": 0.406, "Eu": 0.154,
         "Gd": 0.544, "Tb": 0.099, "Dy": 0.674, "Ho": 0.149, "Er": 0.438, "Tm": 0.068,
@@ -102,6 +117,12 @@ def apply_mixing(concentrations, ree_variables, dict_mix):
     return scaled
 
 def load_all_grids():
+    """Load packaged forward-model arrays, without interpolation or refitting.
+
+    REE concentration arrays are ordered (element, thickness, temperature).
+    The remaining summary arrays are ordered (thickness, temperature).
+    See docs/code-guide.md for units and the legacy pres_* field names.
+    """
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
                      'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
 
@@ -202,8 +223,12 @@ def get_enrichment_values(location, depleted_locations):
 def invert_single_group(df, location, count, grids, test_enrichment_values, min_sample_count=2,
                         *, retain_diagnostics=True, model_cache=None):
     """
-    Perform inversion for a single volcanic location group.
-    Return the best inversion result for this group.
+    Search the temperature/thickness/enrichment grid for the selected rows.
+
+    The name is retained for compatibility. The public workflow gives each
+    sample its own location label, so this function normally fits one sample.
+    Return None if no valid fit exists; otherwise return the result dictionary
+    documented in docs/code-guide.md. No calibration is applied here.
 
     retain_diagnostics preserves full misfit surfaces for plotting; turn it off
     for tabular results only. A run-local model_cache reuses log predictions
@@ -268,7 +293,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
                 "threshold": threshold,
             })
 
-    # Convert best index to physical values
+    # Rows represent lithospheric thickness; columns represent excess temperature.
+    # The legacy p_idx name denotes a thickness row, not pressure in GPa.
     if best_result["min_idx"] is None:
         return None
 
@@ -409,8 +435,19 @@ def aggregate_per_sample_results(results_df):
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, individual_sample_figures=False,
                           group_comparison_figure=True, *, plot_archive=None):
-    """Invert samples; optionally save a self-contained archive for later plotting."""
+    """Fit samples, calibrate parameters, export tables and optionally plot.
+
+    plot_archive=None disables saving. A .zip path saves the data needed for
+    regenerate_figures(), even when both plotting flags are False. Tables and
+    immediate figures are written relative to the current working directory.
+    Return the per-sample DataFrame in input order, excluding unfittable samples.
+    """
     from contextlib import nullcontext
+    if plot_archive is not None:
+        if Path(plot_archive).expanduser().resolve() == Path(file_name).expanduser().resolve():
+            raise ValueError("plot_archive must not overwrite the input data file")
+        if Path(plot_archive).suffix.lower() != '.zip':
+            raise ValueError("plot_archive must have a .zip extension, e.g. 'run.zip'")
     context = (PlotArchiveWriter(plot_archive, {
         "input_file": str(file_name), "depleted_location": depleted_location,
         "correction": correction, "src_Fo": src_Fo,
@@ -454,8 +491,7 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
         grids = load_all_grids()
         model_cache = ModelLogCache(grids, source_composition_mix)
         results = []
-        for g_i, group in enumerate(group_list):
-            location, count = group
+        for location, count in group_list:
             test_enrichment_values = get_enrichment_values(location, depleted_location)
             result = invert_single_group(df, location, count, grids, test_enrichment_values,
                                          min_sample_count=1, model_cache=model_cache,
@@ -475,6 +511,8 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
                 if individual_sample_figures:
                     from .plotting import plot_results
                     plot_results(df, location, count, result)
+                # Release this sample's large surface before starting the next search.
+                del result
 
         if not results:
             raise ValueError("No valid model cell could be fitted to the supplied samples")
@@ -514,9 +552,33 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
         return summary_df
 
 
-def __getattr__(name):
-    if name in {"plot_results", "plot_group_comparison", "compress_enrichment",
-                "enrichment_ticks", "misfit_weighted_stats"}:
-        from . import plotting
-        return getattr(plotting, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+# Explicit compatibility wrappers keep old notebook imports working without
+# importing Matplotlib during a numerical-only run. New code can use plotting.py.
+def plot_results(df, location, count, result, output_dir="inversion_figures"):
+    """Compatibility wrapper for meltinv.plotting.plot_results."""
+    from .plotting import plot_results as render
+    return render(df, location, count, result, output_dir)
+
+
+def plot_group_comparison(results_df, min_count=3, output_dir="inversion_figures"):
+    """Compatibility wrapper for meltinv.plotting.plot_group_comparison."""
+    from .plotting import plot_group_comparison as render
+    return render(results_df, min_count, output_dir)
+
+
+def compress_enrichment(e):
+    """Compatibility wrapper for the plot-only enrichment transformation."""
+    from .plotting import compress_enrichment as transform
+    return transform(e)
+
+
+def enrichment_ticks(enrichment_values):
+    """Compatibility wrapper for enrichment-axis tick labels."""
+    from .plotting import enrichment_ticks as ticks
+    return ticks(enrichment_values)
+
+
+def misfit_weighted_stats(values, misfit):
+    """Compatibility wrapper for the plotted weighted mean and spread."""
+    from .plotting import misfit_weighted_stats as stats
+    return stats(values, misfit)

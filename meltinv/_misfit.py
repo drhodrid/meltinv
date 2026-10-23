@@ -36,7 +36,14 @@ class ModelLogCache:
 
 
 def prepare_observations(df, mask, ree_variables, min_sample_count):
-    """Extract usable log10 ppm values once, retaining element and sample order."""
+    """Prepare measured concentrations for repeated comparison with model grids.
+
+    Return (element_index, log10_values) pairs in REE order. Each values array
+    contains the positive, finite measurements for that element in sample order.
+    min_sample_count is a count per element, not the six-REE sample filter used
+    by invert_melt_condition. The public per-sample workflow passes 1 here.
+    Concentrations must use the same units as the model (ppm).
+    """
     observations = []
     for i, ree in enumerate(ree_variables):
         values = pd.to_numeric(df.loc[mask, ree], errors='coerce').to_numpy(dtype=float)
@@ -47,14 +54,22 @@ def prepare_observations(df, mask, ree_variables, min_sample_count):
 
 
 def evaluate_misfit(observations, model_logs, model_valid, *, diagnostic_threshold=True):
-    """Return the N-3 log10 residual grid, optional percentile and first minimum.
+    """Evaluate sqrt(sum(log10 residual squared) / (N - 3)) at every cell.
+
+    N counts measured residuals; model_logs/model_valid have axes
+    (REE, lithospheric-thickness row, excess-temperature column). Return
+    (misfit_grid, tenth_percentile, best_index), where best_index is (row, col).
+    With insufficient observations all three are None. If no model cell is
+    valid, the grid contains NaNs and the last two values are None. The optional
+    percentile is a legacy diagnostic, not a confidence threshold or filter.
+    This residual measure is not an uncertainty-normalised reduced chi-squared.
 
     Any invalid prediction for a measured element excludes that model cell.
     Summation order matches the original element-then-sample loop. Ties select
     the first cell in row-major order; zero residuals remain valid minima.
     """
-    n = sum(len(values) for _, values in observations)
-    if not observations or n <= 3:
+    residual_count = sum(len(values) for _, values in observations)
+    if not observations or residual_count <= 3:
         return None, None, None
     valid = np.ones(model_logs.shape[1:], dtype=bool)
     squared = np.zeros(model_logs.shape[1:], dtype=float)
@@ -63,7 +78,7 @@ def evaluate_misfit(observations, model_logs, model_valid, *, diagnostic_thresho
         valid &= usable
         for value in values:
             squared[usable] += (model_logs[i][usable] - value) ** 2
-    misfit = np.where(valid, np.sqrt(squared / (n - 3)), np.nan)
+    misfit = np.where(valid, np.sqrt(squared / (residual_count - 3)), np.nan)
     if not valid.any():
         return misfit, None, None
     threshold = np.percentile(misfit[valid], 10) if diagnostic_threshold else None
