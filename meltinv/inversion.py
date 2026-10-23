@@ -5,6 +5,7 @@ import importlib.resources as pkg_resources
 import numpy as np
 from .frac_correction import fractionation_correction
 from .plot_ree import plot_ree, plot_ree_range
+from ._misfit import ModelLogCache, prepare_observations, evaluate_misfit
 
 def compress_enrichment(e):
     """Same display transform as plot_multiple_slices.py: divide negative
@@ -182,54 +183,11 @@ def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
     (N residuals, 3 fitted parameters). Model cells with a missing or non-positive prediction
     for any measured element are excluded (NaN).
     """
-    ree_variables = grids["ree_variables"]
-    simulation = grids["simulation"]
+    observations = prepare_observations(df, mask, grids["ree_variables"], min_sample_count)
+    logs, valid, factors = ModelLogCache(grids, source_composition_mix).get(scale_val)
+    misfit, threshold, index = evaluate_misfit(observations, logs, valid)
+    return misfit, threshold, index, factors if misfit is not None else None
 
-    # Apply enrichment scaling
-    dict_mix = source_composition_mix(scale_val)
-    simulation_scaled = apply_mixing(simulation, ree_variables, dict_mix)
-
-    valid_mask = np.ones_like(simulation_scaled[0], dtype=bool)
-
-    # Root-mean-square log10 residual over all usable REE values, corrected for the
-    # 3 fitted parameters (T, h, enrichment): sqrt( sum of squared residuals / (N - 3) )
-    total_sq_grid = np.zeros_like(simulation_scaled[0], dtype=float)
-    num_residuals = 0
-    num_ree_valid = 0
-
-    for i, ree in enumerate(ree_variables):
-        c_sample = pd.to_numeric(df.loc[mask, ree], errors="coerce").to_numpy(dtype=float)
-        c_sample = c_sample[np.isfinite(c_sample) & (c_sample > 0)]
-
-        if len(c_sample) < min_sample_count:
-            continue
-
-        # Only model cells with a finite, positive prediction for this element can be fitted
-        model = simulation_scaled[i]
-        usable = np.isfinite(model) & (model > 0)
-        valid_mask &= usable
-
-        for c_l in c_sample:
-            total_sq_grid[usable] += (np.log10(model[usable]) - np.log10(c_l)) ** 2
-            num_residuals += 1
-
-        num_ree_valid += 1
-
-    degrees_of_freedom = num_residuals - 3
-    if num_ree_valid == 0 or degrees_of_freedom <= 0:
-        return None, None, None, None
-
-    total_misfit_grid = np.where(valid_mask, np.sqrt(total_sq_grid / degrees_of_freedom), np.nan)
-
-    if not valid_mask.any():
-        return total_misfit_grid, None, None, dict_mix
-
-    # The best fit is the global minimum (an exact match with zero misfit included);
-    # the 10th-percentile threshold is kept for reference only
-    threshold = np.percentile(total_misfit_grid[valid_mask], 10)
-    min_idx = np.unravel_index(np.nanargmin(total_misfit_grid), total_misfit_grid.shape)
-
-    return total_misfit_grid, threshold, min_idx, dict_mix
 
 def get_enrichment_values(location, depleted_locations):
     """
@@ -258,10 +216,18 @@ def get_enrichment_values(location, depleted_locations):
         return default_range
 
 
-def invert_single_group(df, location, count, grids, test_enrichment_values, min_sample_count=2):
+def invert_single_group(df, location, count, grids, test_enrichment_values, min_sample_count=2,
+                        *, retain_diagnostics=True, model_cache=None):
     """
     Perform inversion for a single volcanic location group.
     Return the best inversion result for this group.
+
+    retain_diagnostics preserves full misfit surfaces for plotting; turn it off
+    for tabular results only. A run-local model_cache reuses log predictions
+    across samples. Equal minima retain the first enrichment and row-major cell.
+    T_mean is plume excess temperature in K; depth_mean is lithospheric thickness
+    in km. The legacy pres_* keys contain melting depths in km, not GPa.
+    These are uncorrected best-fit quantities; calibration is applied by the caller.
     """
     ree_variables = grids["ree_variables"]
     simulation_concentrations = grids["simulation"]
@@ -289,18 +255,18 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
     }
 
     full_3d_grids = []
+    observations = prepare_observations(df, mask, ree_variables, min_sample_count)
+    if model_cache is None:
+        model_cache = ModelLogCache(grids, source_composition_mix)
 
     for scale_val in test_enrichment_values:
 
-        total_misfit_grid, threshold, min_idx, dict_mix = compute_total_ree_misfit(
-            df=df,
-            mask=mask,
-            scale_val=scale_val,
-            grids=grids,
-            min_sample_count=min_sample_count
-        )
+        logs, valid, dict_mix = model_cache.get(scale_val)
+        total_misfit_grid, threshold, min_idx = evaluate_misfit(
+            observations, logs, valid, diagnostic_threshold=retain_diagnostics)
 
-        full_3d_grids.append(total_misfit_grid)
+        if retain_diagnostics:
+            full_3d_grids.append(total_misfit_grid)
 
         if min_idx is not None:
             global_min_value = total_misfit_grid[min_idx]
@@ -328,10 +294,11 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
     low_ree = [arr[p_idx, t_idx] for arr in lower_bound_concentrations]
     high_ree = [arr[p_idx, t_idx] for arr in upper_bound_concentrations]
 
-    global_flat_index = np.nanargmin(full_3d_grids)
-    e_gl, p_gl, t_gl = np.unravel_index(global_flat_index, np.array(full_3d_grids).shape)
-    mean_ree_global = [arr[p_gl, t_gl] for arr in simulation_concentrations]
-    dict_mix_global = source_composition_mix(test_enrichment_values[e_gl])
+    # The running minimum already is the global minimum of the exhaustive search.
+    # Strict '<' above preserves the same first-tie selection as np.nanargmin.
+    e_gl = test_enrichment_values.index(best_result["scale"])
+    global_flat_index = np.ravel_multi_index(
+        (e_gl, p_idx, t_idx), (len(test_enrichment_values), *simulation_concentrations.shape[1:]))
 
     for i, ree in enumerate(ree_variables):
         factor = best_result["scaling_factors"][ree]
@@ -339,12 +306,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
         low_ree[i] = factor * low_ree[i]
         high_ree[i] = factor * high_ree[i]
 
-    for i, ree in enumerate(ree_variables):
-        factor = dict_mix_global[ree]
-        mean_ree_global[i] = factor * mean_ree_global[i]
-
     return {
-        "full_3d_grids": np.array(full_3d_grids),
+        "full_3d_grids": np.array(full_3d_grids) if retain_diagnostics else None,
         "min_idx": best_result["min_idx"],
         "T_mean": 65 + t_idx * 5,
         "depth_mean": 15 + p_idx * 2 + 1,
@@ -361,11 +324,10 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
         "basalt_idx": test_enrichment_values.index(best_result["scale"]),
         "enrichment_values": test_enrichment_values,
         "misfit_value": best_result["min_misfit_value"],
-        "global_min_value": np.nanmin(full_3d_grids),
+        "global_min_value": best_result["min_misfit_value"],
         "global_flat_index": global_flat_index,
-        "mean_ree_global": mean_ree_global,
-        "ratio_of_local_global_misfit": (1.0 if np.nanmin(full_3d_grids) == 0 else
-                                         best_result["min_misfit_value"] / np.nanmin(full_3d_grids)),
+        "mean_ree_global": mean_ree.copy(),
+        "ratio_of_local_global_misfit": 1.0,
         "misfit_grid": best_result["misfit_grid"],
         "threshold": best_result["threshold"],
         "mean_ree": mean_ree,
@@ -538,6 +500,12 @@ def plot_results(df, location, count, result):
     plt.close(fig)
 
 def calibration(T, P, h, b):
+    """Apply the existing post-inversion solidus-offset prescription.
+
+    T: plume excess temperature (K); P: mean melting *depth* (km, divided by
+    33 to obtain GPa); h: lithospheric thickness (km); b: enrichment percent.
+    Return adjusted (temperature K, thickness km). This does not refit REEs.
+    """
     T = np.array(T)
     P = np.array(P) / 33
     b = np.clip(np.array(b, dtype=float), 0, 100)
@@ -730,12 +698,14 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
 
     group_list = build_group_list(df, min_count=1)
     grids = load_all_grids()
+    model_cache = ModelLogCache(grids, source_composition_mix)
     results = []
     for g_i, group in enumerate(group_list):
         location, count = group
         test_enrichment_values = get_enrichment_values(location, depleted_location)
         result = invert_single_group(df, location, count, grids, test_enrichment_values,
-                                     min_sample_count=1)
+                                     min_sample_count=1, model_cache=model_cache,
+                                     retain_diagnostics=individual_sample_figures)
 
         if result is not None:
             result["location"] = location

@@ -246,7 +246,7 @@ The inversion writes two results files.
 This file has one row per location, made by combining the per-sample results:
 
 1. Every column is averaged over all inverted samples at that location, with weights of `1 / misfit_value`, so better-fitting samples count for more.
-2. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
+2. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, the mean and both bounds are in the same percentage units. Only the figures compress negative (depleted) values by dividing them by 100.
 
 For the example, the main columns look like this:
 
@@ -295,7 +295,7 @@ One figure per location is saved as `inversion_figures/group_comparison_{locatio
 | **(a)** | Excess temperature vs lithospheric thickness, one point per sample |
 | **(b)** | Relative enrichment vs lithospheric thickness |
 | **(c)** | Excess temperature vs relative enrichment |
-| **(d-1) to (d-3)** | Histograms of temperature, thickness and enrichment. The dashed line is the misfit-weighted mean and the grey band is ± 1 weighted standard deviation, computed the same way as the location summary in Step 4. |
+| **(d-1) to (d-3)** | Histograms of temperature, thickness and enrichment. The dashed line is the misfit-weighted mean and the grey band is ± 1 weighted standard deviation, computed using the same weighting rule as the location summary in Step 4. Enrichment histograms apply the display transformation before computing their statistics, so these need not equal a transformation of the exported mean and bounds. |
 
 In panels (a) to (c), points are coloured by misfit; darker blue is a better fit. Depleted enrichment values (negative) are divided by 100 so they fit on the same axis. Locations with fewer than 3 samples are skipped, with a message.
 
@@ -375,6 +375,31 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 6. **Location summary.** The per-sample results are combined for each location with a misfit-weighted average, as described in [Step 4](#step-4-reading-the-results).
 
 ---
+
+### Search implementation and reproducibility
+
+The search prepares each sample's usable log10 concentrations once and caches
+log10 model predictions for each enrichment value across samples. The cache is
+local to a run (about 63 MiB for all 171 enrichments on the supplied grid).
+The multiplication before the logarithm and the residual summation order are
+preserved. Equal minima select the first enrichment searched, then the first
+cell in row-major order. Full misfit surfaces and diagnostic percentiles are
+retained only when individual-sample figures are requested; the output tables
+and scientific settings are the same either way.
+
+To compare a change with a previous Git revision, including every value in the
+returned table and the two exported spreadsheets:
+
+```bash
+python tests/compare_search_revision.py --reference 0196fe6
+python tests/compare_search_revision.py --reference 0196fe6 --modern
+```
+
+The second command uses all bundled pre-corrected modern-OIB samples. Both
+implementations run sequentially with identical inputs and plotting disabled.
+The script requires exact table equality and reports wall times; these timings
+include input/output but exclude olivine correction and figure generation.
+It checks implementation equivalence, not the physical validity of the model.
 
 ## 6. Troubleshooting
 
